@@ -183,6 +183,7 @@ from controllers.planning_controller import start_planning
 from controllers.monitoring_controller import start_monitoring
 from controllers.evaluation_controller import start_evaluation
 from controllers.learning_flow_controller import run_learning_flow
+from retrieval_service import RetrievalService
 
 from database import (
     get_or_create_user,
@@ -263,6 +264,7 @@ ALGORITHM_GOALS = {
 }
 
 algorithm_sessions = {}
+
 
 def classify_algorithm_goal(text):
     t = text.lower().strip()
@@ -426,6 +428,13 @@ def algorithm_phase_prompt(goal_id, phase):
     }
     return prompts.get(goal_id, {}).get(phase)
 
+# ==========================
+# Knowledge Retrieval V2
+# ==========================
+
+
+retrieval_service = RetrievalService()
+
 async def start_algorithm(ctx, question=None):
     goal_id = classify_algorithm_goal(question or "")
     if not goal_id:
@@ -530,6 +539,7 @@ async def start_algorithm_flow(ctx, question=None):
 
 
     question = question.strip()
+    knowledge_result = retrieval_service.get_best_match(question)
 
 
     # ---------------------------------
@@ -610,6 +620,57 @@ async def start_algorithm_flow(ctx, question=None):
         f"**QP:** `{qp}`\n"
         f"**Metacognitive Phase:** {metacognitive_flow}\n"
     )
+
+
+    # ---------------------------------
+    # V2 Knowledge Retrieval Result
+    # ---------------------------------
+
+    if knowledge_result:
+
+        unit = knowledge_result["unit"]
+         # ---------------------------------
+        # ดึง Concept Content จาก JSON
+        # ---------------------------------
+
+        concept_items = unit.get("concept_content", [])
+        concept_text = "\n".join(
+            item.get("text", "")
+            for item in concept_items
+            if item.get("text")
+        )
+
+        # แสดงผล Retrieval
+        message += (
+            "\n### 📚 Knowledge Retrieved\n\n"
+            f"**KU:** {unit.get('ku_id')}\n"
+            f"**หัวข้อ:** {unit.get('title')}\n"
+            f"**Matched Term:** `{knowledge_result['matched_term']}`\n"
+            f"**Match Type:** {knowledge_result['match_type']}\n"
+            f"**Score:** {knowledge_result['score']}\n"
+        )
+
+        # แสดงเนื้อหาความรู้
+        if concept_text:
+
+            message += (
+                "\n### 📖 เนื้อหาที่เกี่ยวข้อง\n\n"
+                f"{concept_text}\n"
+            )
+
+        else:
+
+            message += (
+                "\n### 📖 เนื้อหาที่เกี่ยวข้อง\n\n"
+                "ยังไม่มีเนื้อหาสำหรับ Knowledge Unit นี้\n"
+            )
+
+    else:
+
+        message += (
+            "\n### 📚 Knowledge Retrieved\n\n"
+            "❌ ไม่พบ Knowledge Unit ที่เกี่ยวข้อง\n"
+        )
 
 
     # แสดงเฉพาะกรณีที่มีพฤติกรรมพิเศษ
