@@ -17,6 +17,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 
 from ui import MainMenu
+from config import QUESTION_BANK_PATH
 from typhoon_service import (
     ask_ai,
     ask_grounded_answer,
@@ -41,7 +42,9 @@ from intent_service import detect_intent
 from logger import (
     add_learning_log,
     update_learning_log,
-    complete_learning_session
+    complete_learning_session,
+    add_metacognitive_response,
+    add_hint_usage
 )
 
 
@@ -382,14 +385,9 @@ def detect_learning_goal(question):
 
     allowed_ku_ids = []
 
-    question_bank_path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        "question_bank.json"
-    )
-
     try:
         with open(
-            question_bank_path,
+            QUESTION_BANK_PATH,
             "r",
             encoding="utf-8"
         ) as file:
@@ -530,14 +528,9 @@ def get_allowed_ku_ids_for_lg(lg_id):
     if not lg_id:
         return []
 
-    question_bank_path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        "question_bank.json"
-    )
-
     try:
         with open(
-            question_bank_path,
+            QUESTION_BANK_PATH,
             "r",
             encoding="utf-8"
         ) as file:
@@ -754,6 +747,16 @@ async def handle_qp_response(message, session):
         except Exception:
             pass
 
+    add_metacognitive_response(
+        session_id=session.get("session_id"),
+        phase=qp.get("phase", phase),
+        question_id=qp.get("question_id"),
+        qp_id=qp.get("qp_id"),
+        system_question=qp.get("system_question"),
+        student_answer=student_answer,
+        feedback=qp_feedback
+    )
+
     session.setdefault("qp_responses", []).append({
         "question_id": qp.get("question_id"),
         "qp_id": qp.get("qp_id"),
@@ -893,81 +896,106 @@ async def start_algorithm_flow(ctx, question=None):
 ให้ผู้เรียนเขียน Algorithm ด้วยตนเอง
 """
 
-    try:
+        try:
 
-        practice_answer = await asyncio.to_thread(
-            ask_ai,
-            practice_prompt
+            practice_answer = await asyncio.to_thread(
+                ask_ai,
+                practice_prompt
+            )
+
+        except Exception as e:
+
+            practice_answer = (
+                "❌ ไม่สามารถสร้างโจทย์ฝึกได้ในขณะนี้\n"
+                f"`{type(e).__name__}: {e}`"
+            )
+
+        planning_qp = get_session_qp("LG08", "Planning")
+
+        # คำใบ้ของโหมดฝึกใช้ชุดคำใบ้ของคำถาม Monitoring ข้อแรกของ LG08
+        # (hint_bank.json ผูกคำใบ้ไว้กับ Question ID ไม่มีของ "PRACTICE")
+        first_monitoring_qp = get_session_qp("LG08", "Monitoring")
+        hint_question_id = (
+            first_monitoring_qp.get("question_id")
+            if first_monitoring_qp else None
+        )
+        planning_text = (
+            "\n\n### 🧠 วางแผนก่อนลงมือ\n\n"
+            f"{planning_qp.get('system_question', '-')}\n\n"
+            "✍️ **พิมพ์คำตอบของคุณใน Chat ได้เลย**"
+            if planning_qp else
+            "\n\n### ⚠️ ไม่พบคำถามวางแผนจาก QP.xlsx\n\n"
+            "ระบบจะให้คุณลงมือเขียน Algorithm ได้เลย"
         )
 
-    except Exception as e:
+        message = (
+            "## 📝 โจทย์ฝึก Algorithm\n\n"
+            f"{practice_answer}"
+            f"{planning_text}\n\n"
+            "💡 ตอบคำถามวางแผนก่อน แล้วระบบจะให้คุณลงมือเขียน Algorithm"
+        )
+        await send_long_message(ctx, message)
 
-        practice_answer = (
-            "❌ ไม่สามารถสร้างโจทย์ฝึกได้ในขณะนี้\n"
-            f"`{type(e).__name__}: {e}`"
+        algorithm_question = (
+            "จากโจทย์สถานการณ์ที่กำหนด "
+            "จงเขียน Algorithm เพื่อแก้ปัญหา "
+            "โดยระบุขั้นตอนการทำงานให้ชัดเจน"
         )
 
-    planning_qp = get_session_qp("LG08", "Planning")
-    planning_text = (
-        "\n\n### 🧠 วางแผนก่อนลงมือ\n\n"
-        f"{planning_qp.get('system_question', '-')}\n\n"
-        "✍️ **พิมพ์คำตอบของคุณใน Chat ได้เลย**"
-        if planning_qp else
-        "\n\n### ⚠️ ไม่พบคำถามวางแผนจาก QP.xlsx\n\n"
-        "ระบบจะให้คุณลงมือเขียน Algorithm ได้เลย"
-    )
+        print(f"[PRACTICE QP] planning_qp={planning_qp}")
 
-    message = (
-        "## 📝 โจทย์ฝึก Algorithm\n\n"
-        f"{practice_answer}"
-        f"{planning_text}\n\n"
-        "💡 ตอบคำถามวางแผนก่อน แล้วระบบจะให้คุณลงมือเขียน Algorithm"
-    )
-    await send_long_message(ctx, message)
+        # บันทึก Learning Log ของโหมดฝึก เพื่อใช้เป็นข้อมูลวิจัย
+        practice_log = add_learning_log(
+            user_id=ctx.author.id,
+            username=str(ctx.author),
+            user_question=question,
+            ku_id=None,
+            ku_title=None,
+            lg_id="LG08",
+            lg_name="ฝึกออกแบบ Algorithm จากสถานการณ์",
+            qp_id=planning_qp.get("qp_id") if planning_qp else None,
+            question_id="PRACTICE",
+            system_question=practice_answer
+        )
 
-    algorithm_question = (
-        "จากโจทย์สถานการณ์ที่กำหนด "
-        "จงเขียน Algorithm เพื่อแก้ปัญหา "
-        "โดยระบุขั้นตอนการทำงานให้ชัดเจน"
-    )
+        pending_learning_sessions[ctx.author.id] = {
+            "learning_goal": "LG08 — ฝึกออกแบบ Algorithm จากสถานการณ์",
+            "question": algorithm_question,
+            "algorithm_question": algorithm_question,
+            "ku_id": None,
+            "lg_id": "LG08",
+            "question_id": "PRACTICE",
+            "hint_question_id": hint_question_id,
+            "attempt": 1,
+            "max_attempts": MAX_ATTEMPTS,
+            "hint_level": 0,
+            "attempt_history": [],
+            "qp_responses": [],
+            "active_qp": planning_qp,
+            "phase": "PLANNING_QP" if planning_qp else "ALGORITHM_ANSWER",
+            "reflection_shown": False,
+            "expected_evidence": "",
+            "session_id": (
+                practice_log.get("session_id") if practice_log else None
+            ),
+            "practice_mode": True,
+            "practice_prompt": practice_answer
+        }
 
-    print(f"[PRACTICE QP] planning_qp={planning_qp}")
+        print("\n========== PRACTICE SESSION CREATED ==========")
 
-    pending_learning_sessions[ctx.author.id] = {
-        "learning_goal": "LG08 — ฝึกออกแบบ Algorithm จากสถานการณ์",
-        "question": algorithm_question,
-        "algorithm_question": algorithm_question,
-        "ku_id": None,
-        "lg_id": "LG08",
-        "question_id": "PRACTICE",
-        "attempt": 1,
-        "max_attempts": MAX_ATTEMPTS,
-        "hint_level": 0,
-        "attempt_history": [],
-        "qp_responses": [],
-        "active_qp": planning_qp,
-        "phase": "PLANNING_QP" if planning_qp else "ALGORITHM_ANSWER",
-        "reflection_shown": False,
-        "expected_evidence": "",
-        "session_id": None,
-        "practice_mode": True,
-        "practice_prompt": practice_answer
-    }
+        print(f"User ID: {ctx.author.id}")
 
-    print("\n========== PRACTICE SESSION CREATED ==========")
+        print("LG: LG08")
 
-    print(f"User ID: {ctx.author.id}")
+        print("Question ID: PRACTICE")
 
-    print("LG: LG08")
+        print("Session:", pending_learning_sessions[ctx.author.id])
 
-    print("Question ID: PRACTICE")
-
-    print("Session:", pending_learning_sessions[ctx.author.id])
-
-    print("==============================================\n")
+        print("==============================================\n")
 
 
-    return
+        return
 
     # ----------------------------------------------
     # Validate Input
@@ -1664,7 +1692,8 @@ async def on_message(message):
                 "แล้วส่งคำตอบมาได้เลย 😊"
             )
 
-            await message.channel.send(
+            await send_long_message(
+                message.channel,
                 conceptual_message
             )
 
@@ -1706,7 +1735,7 @@ async def on_message(message):
         # GOOD
         # ======================================
         if level == "GOOD":
-            await message.channel.send(feedback_message)
+            await send_long_message(message.channel, feedback_message)
 
             evaluation_qp = get_session_qp(
                 session.get("lg_id"), "Evaluation",
@@ -1746,7 +1775,7 @@ async def on_message(message):
         # --------------------------------------
         if attempt > max_attempts:
 
-            await message.channel.send(feedback_message)
+            await send_long_message(message.channel, feedback_message)
 
             evaluation_qp = get_session_qp(
                 session.get("lg_id"), "Evaluation",
@@ -1784,13 +1813,23 @@ async def on_message(message):
             current_hint_level = session.get("hint_level", 0)
             next_hint_level = current_hint_level + 1
             hint = get_hint(
-                question_id=session.get("question_id"),
+                question_id=(
+                    session.get("hint_question_id")
+                    or session.get("question_id")
+                ),
                 hint_level=next_hint_level
             )
             hint_text = None
             if hint:
                 session["hint_level"] = next_hint_level
                 hint_text = hint.get("Hint Text", "ลองพิจารณาคำถามอีกครั้ง")
+                add_hint_usage(
+                    session_id=session_id,
+                    hint_question_id=hint.get("Question ID"),
+                    hint_level=next_hint_level,
+                    hint_text=hint_text,
+                    attempt=attempt
+                )
 
             monitoring_qp = get_session_qp(
                 session.get("lg_id"), "Monitoring",
@@ -1802,7 +1841,7 @@ async def on_message(message):
                 session["active_qp"] = monitoring_qp
                 session["phase"] = "MONITORING_QP"
                 session["pending_hint_text"] = hint_text
-                await message.channel.send(feedback_message)
+                await send_long_message(message.channel, feedback_message)
                 await send_long_message(
                     message.channel,
                     "### 🔎 ลองตรวจสอบคำตอบของตัวเอง\n\n"
@@ -1835,7 +1874,7 @@ async def on_message(message):
                 session["active_qp"] = monitoring_qp
                 session["phase"] = "MONITORING_QP"
                 session["pending_hint_text"] = None
-                await message.channel.send(feedback_message)
+                await send_long_message(message.channel, feedback_message)
                 await send_long_message(
                     message.channel,
                     "### 🔎 ลองตรวจสอบความคิดของตัวเอง\n\n"
@@ -1852,7 +1891,8 @@ async def on_message(message):
         # --------------------------------------
         # Send Adaptive Feedback
         # --------------------------------------
-        await message.channel.send(
+        await send_long_message(
+            message.channel,
             feedback_message
         )
 
@@ -1883,4 +1923,7 @@ async def on_message(message):
 # Run Bot
 # ==================================================
 
-bot.run(TOKEN)
+if __name__ == "__main__":
+    if not TOKEN:
+        raise RuntimeError("ไม่พบ DISCORD_TOKEN ในไฟล์ .env")
+    bot.run(TOKEN)

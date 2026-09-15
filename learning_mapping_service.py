@@ -1,7 +1,7 @@
 import json
-import os
 import re
 
+from config import QUESTION_BANK_PATH
 from retrieval_service import RetrievalService
 from learning_goal_service import LearningGoalService
 from intent_service import detect_intent
@@ -10,13 +10,7 @@ from intent_service import detect_intent
 class LearningMappingService:
 
     def __init__(self):
-        self.base_dir = os.path.dirname(os.path.abspath(__file__))
-
-        self.question_bank_path = os.path.join(
-            self.base_dir,
-            "knowledge_base",
-            "question_bank.json"
-        )
+        self.question_bank_path = QUESTION_BANK_PATH
 
         self.retrieval_service = RetrievalService()
         self.learning_goal_service = LearningGoalService()

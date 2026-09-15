@@ -1,28 +1,15 @@
 """
-qp_service.py
-------------
-QP (Question Prompt) service for the AI Learning Assistant.
+qp_service.py (v2)
+QP service for the AI Learning Assistant.
 
-Source of truth:
-    QP.xlsx
+QP.xlsx is the source of truth.
+Actual columns:
+Question ID, LG ID, QP ID, Related KU,
+Example User Input / Trigger, Phase, System Question,
+Question Purpose, Expect Input.
 
-Responsibilities:
-    - Load QP questions from Excel
-    - Filter QP by Learning Goal (LG)
-    - Filter QP by Phase
-    - Filter QP by LG + Phase
-    - Retrieve a specific QP by Q ID
-    - Support the existing QP structure without inventing new questions
-    - Provide deterministic selection for use by the learning session
-
-Expected Phase values:
-    Planning
-    Monitoring
-    Evaluation
-
-Reflection is intentionally NOT generated here because the current QP
-source does not define a Reflection phase. A future Reflection QP can be
-added to the Excel source and this service will be able to retrieve it.
+The workbook contains LG header rows. Questions inherit the most recent
+LG header when their own LG ID cell is blank.
 """
 
 from __future__ import annotations
@@ -30,452 +17,350 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import re
-
-try:
-    import pandas as pd
-except ImportError:
-    pd = None
-
+import pandas as pd
 
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_QP_FILE = BASE_DIR / "QP.xlsx"
 
-# Keep aliases centralized so main.py can use either English or Thai labels.
 PHASE_ALIASES = {
-    "planning": "Planning",
-    "plan": "Planning",
-    "วางแผน": "Planning",
-    "การวางแผน": "Planning",
-
-    "monitoring": "Monitoring",
-    "monitor": "Monitoring",
-    "ตรวจสอบ": "Monitoring",
-    "การตรวจสอบ": "Monitoring",
-
-    "evaluation": "Evaluation",
-    "evaluate": "Evaluation",
-    "ประเมิน": "Evaluation",
-    "การประเมิน": "Evaluation",
-
-    "reflection": "Reflection",
-    "สะท้อน": "Reflection",
+    "planning": "Planning", "plan": "Planning",
+    "วางแผน": "Planning", "การวางแผน": "Planning",
+    "monitoring": "Monitoring", "monitor": "Monitoring",
+    "ตรวจสอบ": "Monitoring", "การตรวจสอบ": "Monitoring",
+    "evaluation": "Evaluation", "evaluate": "Evaluation",
+    "ประเมิน": "Evaluation", "การประเมิน": "Evaluation",
+    "reflection": "Reflection", "สะท้อน": "Reflection",
     "สะท้อนคิด": "Reflection",
 }
 
-
 def _clean(value: Any) -> str:
-    """Convert a cell value to a normalized string."""
     if value is None:
         return ""
-    return str(value).strip()
-
+    text = str(value).strip()
+    return "" if text.lower() == "nan" else text
 
 def _normalize_phase(value: Any) -> str:
-    """Normalize Phase values while preserving the workbook's terminology."""
     text = _clean(value)
     if not text:
         return ""
+    return PHASE_ALIASES.get(text.lower(), text)
 
-    key = re.sub(r"\s+", " ", text).strip().lower()
-    return PHASE_ALIASES.get(key, text)
-
-
-def _normalize_lg(value: Any) -> str:
-    """
-    Normalize LG values.
-
-    Accepts:
-        LG08
-        lg08
-        LG08 — ฝึกออกแบบ...
-        LG08 - ฝึกออกแบบ...
-    """
+def _normalize_id(value: Any, prefix: str) -> str:
     text = _clean(value)
     if not text:
         return ""
+    m = re.search(rf"\b{re.escape(prefix)}\s*0*(\d+)\b",
+                  text, flags=re.IGNORECASE)
+    return f"{prefix}{int(m.group(1)):02d}" if m else text
 
-    match = re.search(r"\bLG\s*0*(\d+)\b", text, flags=re.IGNORECASE)
-    if match:
-        return f"LG{int(match.group(1)):02d}"
-
-    return text
-
-
-def _normalize_qid(value: Any) -> str:
-    """Normalize Q IDs such as Q01 / q1 / Q001."""
-    text = _clean(value)
-    if not text:
-        return ""
-
-    match = re.search(r"\bQ\s*0*(\d+)\b", text, flags=re.IGNORECASE)
-    if match:
-        return f"Q{int(match.group(1)):02d}"
-
-    return text
-
+def _normalize_lg_id(value: Any) -> str:
+    return _normalize_id(value, "LG")
 
 def _find_column(columns: List[str], candidates: List[str]) -> Optional[str]:
-    """Find a workbook column using exact, then case-insensitive matching."""
     for candidate in candidates:
         if candidate in columns:
             return candidate
-
     lowered = {c.lower(): c for c in columns}
     for candidate in candidates:
         if candidate.lower() in lowered:
             return lowered[candidate.lower()]
-
     return None
 
-
 class QPService:
-    """Service for retrieving QP questions from QP.xlsx."""
-
     def __init__(self, qp_file: str | Path = DEFAULT_QP_FILE):
         self.qp_file = Path(qp_file)
         self.questions: List[Dict[str, Any]] = []
         self.columns: List[str] = []
         self.column_map: Dict[str, Optional[str]] = {}
+        self.duplicate_question_ids: List[str] = []
+        self.source_row_count = 0
+        self.ignored_header_rows = 0
         self._load()
 
     def _load(self) -> None:
         if not self.qp_file.exists():
             raise FileNotFoundError(
                 f"ไม่พบไฟล์ QP: {self.qp_file}\n"
-                "กรุณาวาง QP.xlsx ไว้ในโฟลเดอร์เดียวกับ qp_service.py"
+                "วาง QP.xlsx ไว้ในโฟลเดอร์เดียวกับ qp_service.py"
             )
 
-        if pd is None:
-            raise ImportError(
-                "ต้องติดตั้ง pandas และ openpyxl ก่อนใช้งาน qp_service.py"
-            )
-
-        df = pd.read_excel(self.qp_file)
-        df = df.dropna(how="all")
-
+        df = pd.read_excel(self.qp_file).dropna(how="all")
+        self.source_row_count = len(df)
         self.columns = [str(c).strip() for c in df.columns]
 
-        # The service is deliberately flexible about column names.
         self.column_map = {
-            "qid": _find_column(
-                self.columns,
-                ["Q ID", "QID", "Question ID", "Question_ID", "ID", "Q"],
-            ),
-            "lg": _find_column(
-                self.columns,
-                ["LG", "Learning Goal", "Learning_Goal", "LearningGoal"],
-            ),
-            "phase": _find_column(
-                self.columns,
-                ["Phase", "phase"],
-            ),
-            "question": _find_column(
-                self.columns,
-                ["Question", "คำถาม", "QP", "Prompt", "Question Text", "System Question"],
-            ),
+            "question_id": _find_column(
+                self.columns, ["Question ID", "Question_ID", "Q ID", "QID"]),
+            "lg_id": _find_column(
+                self.columns, ["LG ID", "LG_ID", "LG", "Learning Goal"]),
+            "qp_id": _find_column(
+                self.columns, ["QP ID", "QP_ID", "QP"]),
             "related_ku": _find_column(
+                self.columns, ["Related KU", "Related_KU", "KU", "Knowledge Unit"]),
+            "trigger": _find_column(
                 self.columns,
-                ["Related KU", "Related_KU", "KU", "Knowledge Unit"],
-            ),
+                ["Example User Input / Trigger", "Example User Input/Trigger",
+                 "Trigger", "Example User Input"]),
+            "phase": _find_column(self.columns, ["Phase", "phase"]),
+            "system_question": _find_column(
+                self.columns, ["System Question", "Question", "คำถาม", "Prompt"]),
+            "question_purpose": _find_column(
+                self.columns, ["Question Purpose", "Purpose"]),
+            "expect_input": _find_column(
+                self.columns, ["Expect Input", "Expected Input", "Expect_Input"]),
         }
 
-        if not self.column_map["qid"]:
+        required = ["question_id", "qp_id", "phase", "system_question"]
+        missing = [k for k in required if not self.column_map[k]]
+        if missing:
             raise ValueError(
-                f"ไม่พบคอลัมน์ Q ID ใน QP.xlsx\n"
-                f"คอลัมน์ที่พบ: {self.columns}"
+                "QP.xlsx ขาดคอลัมน์ที่จำเป็น: "
+                + ", ".join(missing)
+                + f"\nคอลัมน์ที่พบ: {self.columns}"
             )
 
-        if not self.column_map["question"]:
-            raise ValueError(
-                f"ไม่พบคอลัมน์คำถามใน QP.xlsx\n"
-                f"คอลัมน์ที่พบ: {self.columns}"
-            )
+        current_lg_id = ""
 
-        for _, row in df.iterrows():
+        for excel_row, (_, row) in enumerate(df.iterrows(), start=2):
             raw = {str(k).strip(): v for k, v in row.to_dict().items()}
 
-            qid = _normalize_qid(raw.get(self.column_map["qid"], ""))
-            question = _clean(raw.get(self.column_map["question"], ""))
+            raw_lg = _clean(raw.get(self.column_map["lg_id"], "")
+                             if self.column_map["lg_id"] else "")
+            raw_qid = _clean(raw.get(self.column_map["question_id"], "")
+                              if self.column_map["question_id"] else "")
 
-            # Ignore blank / non-question rows.
-            if not qid or not question:
+            # Detect LG headers anywhere in the row.
+            row_text = " | ".join(_clean(v) for v in raw.values() if _clean(v))
+            header_match = re.search(r"\bLG\s*0*(\d+)\b", row_text,
+                                     flags=re.IGNORECASE)
+
+            # An explicit LG ID cell or a header row updates inherited LG.
+            explicit_lg = _normalize_lg_id(raw_lg)
+            if explicit_lg:
+                current_lg_id = explicit_lg
+
+            # Question ID ต้องเป็นรหัสล้วน เช่น Q01 ถ้าเป็นข้อความยาว
+            # (เช่นแถวหัวข้อ LG ที่มีคำว่า "Q10–Q11") ให้ถือเป็นแถวหัวข้อ
+            if re.fullmatch(r"Q\s*\d+", raw_qid, flags=re.IGNORECASE):
+                question_id = _normalize_id(raw_qid, "Q")
+            else:
+                question_id = ""
+
+            # Header/non-question row: ignore it as a question.
+            if not question_id:
+                if header_match:
+                    current_lg_id = f"LG{int(header_match.group(1)):02d}"
+                self.ignored_header_rows += 1
                 continue
 
-            lg_raw = raw.get(self.column_map["lg"], "") if self.column_map["lg"] else ""
-            phase_raw = (
+            if header_match and not explicit_lg:
+                current_lg_id = f"LG{int(header_match.group(1)):02d}"
+
+            qp_id = _normalize_id(
+                raw.get(self.column_map["qp_id"], "")
+                if self.column_map["qp_id"] else "", "QP")
+            phase = _normalize_phase(
                 raw.get(self.column_map["phase"], "")
-                if self.column_map["phase"]
-                else ""
-            )
-            ku_raw = (
-                raw.get(self.column_map["related_ku"], "")
-                if self.column_map["related_ku"]
-                else ""
-            )
+                if self.column_map["phase"] else "")
+            system_question = _clean(
+                raw.get(self.column_map["system_question"], "")
+                if self.column_map["system_question"] else "")
+
+            if not system_question:
+                continue
 
             item = {
-                "qid": qid,
-                "lg": _normalize_lg(lg_raw),
-                "lg_raw": _clean(lg_raw),
-                "phase": _normalize_phase(phase_raw),
-                "question": question,
-                "related_ku": _clean(ku_raw),
+                "question_id": question_id,
+                "lg_id": explicit_lg or current_lg_id,
+                "qp_id": qp_id,
+                "related_ku": _clean(
+                    raw.get(self.column_map["related_ku"], "")
+                    if self.column_map["related_ku"] else ""),
+                "trigger": _clean(
+                    raw.get(self.column_map["trigger"], "")
+                    if self.column_map["trigger"] else ""),
+                "phase": phase,
+                "system_question": system_question,
+                "question_purpose": _clean(
+                    raw.get(self.column_map["question_purpose"], "")
+                    if self.column_map["question_purpose"] else ""),
+                "expect_input": _clean(
+                    raw.get(self.column_map["expect_input"], "")
+                    if self.column_map["expect_input"] else ""),
+                "source_row": excel_row,
             }
 
-            # Keep any extra workbook columns available without making
-            # downstream code depend on them.
+            # Preserve other source columns.
             for key, value in raw.items():
                 if key not in item:
-                    item[key] = "" if value is None else value
+                    item[key] = "" if pd.isna(value) else value
 
             self.questions.append(item)
 
-        # Stable ordering: Q01, Q02, ... Q42.
-        self.questions.sort(
-            key=lambda x: int(re.search(r"\d+", x["qid"]).group())
-            if re.search(r"\d+", x["qid"])
-            else 9999
-        )
+        self._refresh_duplicates()
 
-    # ------------------------------------------------------------------
-    # Basic retrieval
-    # ------------------------------------------------------------------
+    def _refresh_duplicates(self) -> None:
+        counts: Dict[str, int] = {}
+        for q in self.questions:
+            counts[q["question_id"]] = counts.get(q["question_id"], 0) + 1
+        self.duplicate_question_ids = sorted(
+            qid for qid, count in counts.items() if count > 1)
 
     def all_questions(self) -> List[Dict[str, Any]]:
-        """Return all loaded QP questions."""
-        return list(self.questions)
+        return [dict(q) for q in self.questions]
 
-    def get_by_qid(self, qid: str) -> Optional[Dict[str, Any]]:
-        """Return one QP by ID, e.g. Q39."""
-        target = _normalize_qid(qid)
-
-        for item in self.questions:
-            if item["qid"] == target:
-                return dict(item)
-
+    def get_by_question_id(self, question_id: str) -> Optional[Dict[str, Any]]:
+        target = _normalize_id(question_id, "Q")
+        for q in self.questions:
+            if q["question_id"] == target:
+                return dict(q)
         return None
 
-    # ------------------------------------------------------------------
-    # LG / Phase retrieval
-    # ------------------------------------------------------------------
+    def get_by_qp_id(self, qp_id: str) -> List[Dict[str, Any]]:
+        target = _normalize_id(qp_id, "QP")
+        return [dict(q) for q in self.questions if q["qp_id"] == target]
 
-    def get_by_lg(
-        self,
-        lg_id: str,
-        phase: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
-        """Return QP questions for an LG, optionally restricted by Phase."""
-        target_lg = _normalize_lg(lg_id)
+    def get_by_lg(self, lg_id: str, phase: Optional[str] = None) -> List[Dict[str, Any]]:
+        target_lg = _normalize_lg_id(lg_id)
         target_phase = _normalize_phase(phase) if phase else None
-
-        results = [
-            dict(item)
-            for item in self.questions
-            if item["lg"] == target_lg
-            and (target_phase is None or item["phase"] == target_phase)
+        return [
+            dict(q) for q in self.questions
+            if q["lg_id"] == target_lg
+            and (target_phase is None or q["phase"] == target_phase)
         ]
-
-        return results
 
     def get_by_phase(self, phase: str) -> List[Dict[str, Any]]:
-        """Return all QP questions for a Phase."""
-        target_phase = _normalize_phase(phase)
+        target = _normalize_phase(phase)
+        return [dict(q) for q in self.questions if q["phase"] == target]
 
-        return [
-            dict(item)
-            for item in self.questions
-            if item["phase"] == target_phase
-        ]
-
-    def get_by_lg_phase(
-        self,
-        lg_id: str,
-        phase: str,
-    ) -> List[Dict[str, Any]]:
-        """
-        Main API for the AI Learning Assistant.
-
-        Example:
-            qp_service.get_by_lg_phase("LG08", "Planning")
-        """
+    def get_by_lg_phase(self, lg_id: str, phase: str) -> List[Dict[str, Any]]:
         return self.get_by_lg(lg_id, phase)
-
-    # ------------------------------------------------------------------
-    # Selection
-    # ------------------------------------------------------------------
 
     def select_qp(
         self,
         lg_id: str,
         phase: str,
-        qid: Optional[str] = None,
-        exclude_qids: Optional[List[str]] = None,
+        question_id: Optional[str] = None,
+        exclude_question_ids: Optional[List[str]] = None,
     ) -> Optional[Dict[str, Any]]:
-        """
-        Select one QP deterministically.
-
-        Priority:
-            1. Explicit qid, if supplied and belongs to LG + Phase
-            2. First eligible QP not in exclude_qids
-
-        This intentionally does NOT randomly generate a question.
-        The QP.xlsx remains the source of truth.
-        """
         candidates = self.get_by_lg_phase(lg_id, phase)
 
-        if qid:
-            target = _normalize_qid(qid)
-            for item in candidates:
-                if item["qid"] == target:
-                    return item
+        if question_id:
+            target = _normalize_id(question_id, "Q")
+            for q in candidates:
+                if q["question_id"] == target:
+                    return q
             return None
 
         excluded = {
-            _normalize_qid(x)
-            for x in (exclude_qids or [])
-            if _normalize_qid(x)
+            _normalize_id(x, "Q")
+            for x in (exclude_question_ids or [])
         }
-
-        for item in candidates:
-            if item["qid"] not in excluded:
-                return item
-
+        for q in candidates:
+            if q["question_id"] not in excluded:
+                return q
         return None
 
     def select_next_qp(
         self,
         lg_id: str,
         phase: str,
-        used_qids: Optional[List[str]] = None,
+        used_question_ids: Optional[List[str]] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Select the next unused QP for LG + Phase."""
-        return self.select_qp(
-            lg_id=lg_id,
-            phase=phase,
-            exclude_qids=used_qids,
-        )
-
-    # ------------------------------------------------------------------
-    # Utility / diagnostics
-    # ------------------------------------------------------------------
+        return self.select_qp(lg_id, phase, exclude_question_ids=used_question_ids)
 
     def count_by_lg_phase(self) -> Dict[str, Dict[str, int]]:
-        """Return a compact LG -> Phase -> count summary."""
         result: Dict[str, Dict[str, int]] = {}
-
-        for item in self.questions:
-            lg = item["lg"] or "(no LG)"
-            phase = item["phase"] or "(no Phase)"
-
+        for q in self.questions:
+            lg = q["lg_id"] or "(no LG)"
+            phase = q["phase"] or "(no Phase)"
             result.setdefault(lg, {})
             result[lg][phase] = result[lg].get(phase, 0) + 1
-
         return result
 
     def validate(self) -> Dict[str, Any]:
-        """
-        Basic diagnostic report.
-
-        This does not alter the workbook and does not invent missing data.
-        """
-        qids = [x["qid"] for x in self.questions]
-        duplicate_qids = sorted(
-            {qid for qid in qids if qids.count(qid) > 1}
-        )
-
-        missing_lg = [x["qid"] for x in self.questions if not x["lg"]]
-        missing_phase = [x["qid"] for x in self.questions if not x["phase"]]
-
         return {
             "file": str(self.qp_file),
+            "source_rows": self.source_row_count,
+            "ignored_header_rows": self.ignored_header_rows,
             "question_count": len(self.questions),
-            "duplicate_qids": duplicate_qids,
-            "missing_lg": missing_lg,
-            "missing_phase": missing_phase,
-            "phases": sorted(
-                {x["phase"] for x in self.questions if x["phase"]}
-            ),
+            "duplicate_question_ids": self.duplicate_question_ids,
+            "missing_lg": [q["question_id"] for q in self.questions if not q["lg_id"]],
+            "missing_phase": [q["question_id"] for q in self.questions if not q["phase"]],
+            "missing_system_question": [
+                q["question_id"] for q in self.questions if not q["system_question"]],
+            "phases": sorted({q["phase"] for q in self.questions if q["phase"]}),
             "count_by_lg_phase": self.count_by_lg_phase(),
         }
 
 
-# ----------------------------------------------------------------------
-# Module-level convenience API
-# ----------------------------------------------------------------------
-
 _default_service: Optional[QPService] = None
 
-
 def get_qp_service(qp_file: str | Path = DEFAULT_QP_FILE) -> QPService:
-    """Return a cached default QPService."""
     global _default_service
-
     requested = Path(qp_file)
-
     if _default_service is None or _default_service.qp_file != requested:
         _default_service = QPService(requested)
-
     return _default_service
 
+def get_qp_by_question_id(question_id: str):
+    return get_qp_service().get_by_question_id(question_id)
 
-def get_qp_by_qid(qid: str) -> Optional[Dict[str, Any]]:
-    return get_qp_service().get_by_qid(qid)
+def get_qp_by_qp_id(qp_id: str):
+    return get_qp_service().get_by_qp_id(qp_id)
 
-
-def get_qp_by_lg(lg_id: str) -> List[Dict[str, Any]]:
+def get_qp_by_lg(lg_id: str):
     return get_qp_service().get_by_lg(lg_id)
 
-
-def get_qp_by_phase(phase: str) -> List[Dict[str, Any]]:
+def get_qp_by_phase(phase: str):
     return get_qp_service().get_by_phase(phase)
 
-
-def get_qp_by_lg_phase(
-    lg_id: str,
-    phase: str,
-) -> List[Dict[str, Any]]:
+def get_qp_by_lg_phase(lg_id: str, phase: str):
     return get_qp_service().get_by_lg_phase(lg_id, phase)
-
 
 def select_qp(
     lg_id: str,
     phase: str,
+    question_id: Optional[str] = None,
+    exclude_question_ids: Optional[List[str]] = None,
     qid: Optional[str] = None,
     exclude_qids: Optional[List[str]] = None,
-) -> Optional[Dict[str, Any]]:
+):
+    """รองรับทั้งชื่อพารามิเตอร์ใหม่ (question_id) และชื่อเดิม (qid)"""
     return get_qp_service().select_qp(
-        lg_id=lg_id,
-        phase=phase,
-        qid=qid,
-        exclude_qids=exclude_qids,
+        lg_id,
+        phase,
+        question_id or qid,
+        exclude_question_ids or exclude_qids,
     )
 
 
+# ชื่อฟังก์ชันเดิม เพื่อไม่ให้โค้ดเก่าที่ยังเรียกใช้พัง
+def get_qp_by_qid(qid: str):
+    return get_qp_by_question_id(qid)
+
 if __name__ == "__main__":
     service = QPService()
-
-    print("=" * 60)
-    print("QP Service Diagnostic")
-    print("=" * 60)
+    print("=" * 70)
+    print("QP Service v2 Diagnostic")
+    print("=" * 70)
     print(f"File: {service.qp_file}")
+    print(f"Source rows: {service.source_row_count}")
+    print(f"Ignored LG/header rows: {service.ignored_header_rows}")
     print(f"Questions loaded: {len(service.questions)}")
-    print(f"Phases: {sorted({q['phase'] for q in service.questions})}")
+    print(f"Duplicate Question IDs: {service.duplicate_question_ids}")
     print()
-
     print("LG + Phase counts:")
     for lg, phases in service.count_by_lg_phase().items():
         print(f"  {lg}: {phases}")
 
-    print()
-    print("Example: LG08 + Planning")
-    for q in service.get_by_lg_phase("LG08", "Planning"):
-        print(f"  {q['qid']}: {q['question']}")
+    for phase in ("Planning", "Monitoring", "Evaluation"):
+        print(f"\nExample: LG08 + {phase}")
+        for q in service.get_by_lg_phase("LG08", phase):
+            print(
+                f"  {q['question_id']} | {q['qp_id']} | "
+                f"{q['system_question']}"
+            )
 
-    print()
-    print("Example: LG08 + Monitoring")
-    for q in service.get_by_lg_phase("LG08", "Monitoring"):
-        print(f"  {q['qid']}: {q['question']}")
-
-    print()
-    print("Validation:")
+    print("\nValidation:")
     print(service.validate())

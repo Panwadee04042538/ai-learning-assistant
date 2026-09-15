@@ -1,17 +1,11 @@
 import json
-import os
+
+from config import QUESTION_BANK_PATH
 
 
 # ==========================================
 # Load Question Bank
 # ==========================================
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-QUESTION_BANK_PATH = os.path.join(
-    BASE_DIR,
-    "question_bank.json"
-)
 
 
 def load_question_bank():

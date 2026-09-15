@@ -521,6 +521,92 @@ def complete_learning_session(
 
 
 # ==========================================
+# Session Events (Metacognition / Hint)
+# ==========================================
+
+def _append_session_event(session_id, list_key, entry):
+    """
+    เพิ่มเหตุการณ์ลงในรายการของ Session ที่กำหนด
+    ใช้ร่วมกันระหว่างการบันทึกคำตอบ QP และการใช้คำใบ้
+    """
+
+    if not session_id:
+        return None
+
+    logs = load_logs()
+    updated_log = None
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    for log in logs:
+        if log.get("session_id") != session_id:
+            continue
+
+        entry = dict(entry)
+        entry["timestamp"] = now
+        log.setdefault(list_key, []).append(entry)
+        log["last_updated"] = now
+        updated_log = log
+        break
+
+    if updated_log:
+        save_logs(logs)
+
+    return updated_log
+
+
+def add_metacognitive_response(
+    session_id,
+    phase,
+    question_id=None,
+    qp_id=None,
+    system_question=None,
+    student_answer=None,
+    feedback=None
+):
+    """
+    บันทึกคำตอบของผู้เรียนต่อคำถามอภิปัญญา (QP)
+    phase: Planning / Monitoring / Evaluation
+    ข้อมูลนี้ใช้วิเคราะห์พฤติกรรมอภิปัญญาของผู้เรียนในงานวิจัย
+    """
+
+    return _append_session_event(
+        session_id,
+        "metacognitive_responses",
+        {
+            "phase": phase,
+            "question_id": question_id,
+            "qp_id": qp_id,
+            "system_question": system_question,
+            "student_answer": student_answer,
+            "feedback": feedback,
+        }
+    )
+
+
+def add_hint_usage(
+    session_id,
+    hint_question_id,
+    hint_level,
+    hint_text,
+    attempt=None
+):
+    """
+    บันทึกการใช้คำใบ้แบบลำดับขั้น (Scaffolded Hint)
+    """
+
+    return _append_session_event(
+        session_id,
+        "hints_used",
+        {
+            "hint_question_id": hint_question_id,
+            "hint_level": hint_level,
+            "hint_text": hint_text,
+            "attempt": attempt,
+        }
+    )
+
+
+# ==========================================
 # Get User Learning Logs
 # ==========================================
 
