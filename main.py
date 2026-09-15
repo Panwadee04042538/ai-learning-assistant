@@ -792,7 +792,7 @@ async def handle_qp_response(message, session):
         if session_id:
             complete_learning_session(
                 session_id=session_id,
-                final_status="COMPLETED",
+                final_status=session.get("pending_final_status", "COMPLETED"),
                 final_understanding_level=session.get("last_understanding_level", "GOOD")
             )
         await send_long_message(message.channel,
@@ -839,6 +839,176 @@ def is_practice_request(question):
         for pattern in practice_patterns
     )
 
+
+# ==================================================
+# Help Trigger Detection
+# ==================================================
+
+HELP_TRIGGER_PATTERNS = {
+    # ตรวจ STILL_STUCK ก่อน STUCK เสมอ เพราะวลีอย่าง
+    # "ยังไม่รู้" มีคำว่า "ไม่รู้" ปนอยู่ด้วย
+    "STILL_STUCK": ["ยังไม่รู้", "ยังคิดไม่ออก"],
+    "ANSWER_REQUEST": ["ขอเฉลย", "เขียนให้หน่อย", "บอกคำตอบ"],
+    "QUIT_REQUEST": ["พอแล้ว", "จบได้แล้ว", "เลิก"],
+    "STUCK": ["ไม่รู้", "คิดไม่ออก", "ช่วยหน่อย", "ไม่เข้าใจ"],
+}
+
+QUIT_CONFIRM_WORDS = ["ใช่", "yes", "y", "ยืนยัน", "โอเค", "ok"]
+
+
+def detect_help_trigger(text):
+    """
+    ตรวจจับข้อความขอความช่วยเหลือของผู้เรียน แบ่งเป็น 4 กลุ่ม:
+    STUCK / STILL_STUCK / ANSWER_REQUEST / QUIT_REQUEST
+
+    คืนค่า None ถ้าไม่ตรงกับกลุ่มใดเลย
+    """
+
+    if not text:
+        return None
+
+    normalized = text.strip()
+
+    if not normalized:
+        return None
+
+    for category in (
+        "STILL_STUCK",
+        "ANSWER_REQUEST",
+        "QUIT_REQUEST",
+        "STUCK"
+    ):
+        for pattern in HELP_TRIGGER_PATTERNS[category]:
+            if pattern in normalized:
+                return category
+
+    return None
+
+
+def _current_question_text(session):
+    """ข้อความคำถามปัจจุบันของ session ไม่ว่าจะอยู่ Phase ใด"""
+
+    phase = session.get("phase")
+
+    if phase in {"PLANNING_QP", "MONITORING_QP", "EVALUATION_QP"}:
+        active_qp = session.get("active_qp") or {}
+        return active_qp.get("system_question", "-")
+
+    return session.get("algorithm_question") or session.get("question", "-")
+
+
+async def handle_stuck_trigger(message, session):
+    """โหมด STUCK / STILL_STUCK: ให้คำใบ้ระดับถัดไป ไม่นับ attempt"""
+
+    channel = message.channel
+    current_hint_level = session.get("hint_level", 0)
+
+    if current_hint_level >= 3:
+        await send_long_message(
+            channel,
+            "### 🔁 ลองอ่านคำถามเดิมอีกครั้ง\n\n"
+            f"{_current_question_text(session)}"
+        )
+        return
+
+    next_hint_level = current_hint_level + 1
+    question_id = session.get("hint_question_id") or session.get("question_id")
+    hint = get_hint(question_id=question_id, hint_level=next_hint_level)
+
+    if hint:
+        hint_text = hint.get("Hint Text", "ลองพิจารณาคำถามอีกครั้ง")
+        add_hint_usage(
+            session_id=session.get("session_id"),
+            hint_question_id=hint.get("Question ID"),
+            hint_level=next_hint_level,
+            hint_text=hint_text,
+            attempt=session.get("attempt", 1)
+        )
+    else:
+        hint_text = "ลองทบทวนคำถามอีกครั้ง แล้วอธิบายสิ่งที่คุณเข้าใจให้มากที่สุด"
+
+    session["hint_level"] = next_hint_level
+
+    await send_long_message(
+        channel,
+        f"### 💡 คำใบ้ระดับที่ {next_hint_level}/3\n\n"
+        f"{hint_text}"
+    )
+
+
+async def handle_answer_request_trigger(message):
+    """โหมด ANSWER_REQUEST: ห้ามเฉลย กระตุ้นให้คิดต่อใน Phase เดิม"""
+
+    await send_long_message(
+        message.channel,
+        "### 🙅 ขอโทษนะ เฉลยให้ไม่ได้\n\n"
+        "ลองคิดต่ออีกนิด คุณทำได้แน่นอน!\n"
+        "ลองทบทวนสิ่งที่รู้แล้ว แล้วลองตอบคำถามเดิมดูอีกครั้ง"
+    )
+
+
+async def handle_quit_request_trigger(session, message):
+    """โหมด QUIT_REQUEST: ถามยืนยันก่อน 1 ครั้ง"""
+
+    session["awaiting_quit_confirmation"] = True
+
+    await send_long_message(
+        message.channel,
+        "### ❓ ยืนยันการจบบทเรียน\n\n"
+        "คุณต้องการจบบทเรียนนี้ตอนนี้เลยใช่หรือไม่?\n"
+        "พิมพ์ **ใช่** เพื่อยืนยัน หรือพิมพ์ข้อความอื่นเพื่อเรียนต่อ"
+    )
+
+
+async def handle_quit_confirmation(message, session):
+    """ประมวลผลคำตอบยืนยันการขอจบ session"""
+
+    channel = message.channel
+    user_id = message.author.id
+    text = message.content.strip()
+
+    session["awaiting_quit_confirmation"] = False
+
+    confirmed = any(word in text.lower() for word in QUIT_CONFIRM_WORDS)
+
+    if not confirmed:
+        await send_long_message(
+            channel,
+            "### 👍 งั้นเรียนต่อกันเลย\n\nลองตอบคำถามปัจจุบันต่อได้เลยครับ"
+        )
+        return
+
+    session_id = session.get("session_id")
+
+    if session_id:
+        complete_learning_session(
+            session_id=session_id,
+            final_status="CANCELLED",
+            final_understanding_level=session.get("last_understanding_level")
+        )
+
+    pending_learning_sessions.pop(user_id, None)
+
+    await send_long_message(
+        channel,
+        "### 👋 จบบทเรียนแล้ว\n\nขอบคุณที่ตั้งใจเรียนนะครับ แล้วกลับมาฝึกใหม่ได้เสมอ"
+    )
+
+
+async def handle_help_trigger(message, session, category):
+    """เรียก Handler ตามประเภท Help Trigger ที่ตรวจพบ"""
+
+    if category in ("STUCK", "STILL_STUCK"):
+        await handle_stuck_trigger(message, session)
+        return
+
+    if category == "ANSWER_REQUEST":
+        await handle_answer_request_trigger(message)
+        return
+
+    if category == "QUIT_REQUEST":
+        await handle_quit_request_trigger(session, message)
+        return
 
 
 # ==================================================
@@ -1535,6 +1705,22 @@ async def on_message(message):
     session = pending_learning_sessions[user_id]
 
     # ----------------------------------------------
+    # Quit Confirmation (รอคำตอบยืนยันจากรอบก่อนหน้า)
+    # ----------------------------------------------
+    if session.get("awaiting_quit_confirmation"):
+        await handle_quit_confirmation(message, session)
+        return
+
+    # ----------------------------------------------
+    # Help Triggers (ติดขัด / ยังติด / ขอเฉลย / ขอจบ)
+    # ----------------------------------------------
+    help_category = detect_help_trigger(message.content)
+
+    if help_category:
+        await handle_help_trigger(message, session, help_category)
+        return
+
+    # ----------------------------------------------
     # QP Metacognitive Response
     # ----------------------------------------------
     # QP responses do not consume Adaptive Practice attempts.
@@ -1722,13 +1908,25 @@ async def on_message(message):
             f"## {icon} ผลการวิเคราะห์คำตอบ\n\n"
             "### 📊 ระดับความเข้าใจ\n\n"
             f"**{title}**\n\n"
-            "### 💬 Feedback\n\n"
-            f"{feedback}\n\n"
-            "### 💪 สิ่งที่ทำได้ดี\n\n"
-            f"{strength}\n\n"
-            "### 🔧 สิ่งที่ควรเพิ่มเติม\n\n"
-            f"{improvement}\n"
         )
+
+        if feedback and feedback != "-":
+            feedback_message += (
+                "### 💬 Feedback\n\n"
+                f"{feedback}\n\n"
+            )
+
+        if strength and strength != "-":
+            feedback_message += (
+                "### 💪 สิ่งที่ทำได้ดี\n\n"
+                f"{strength}\n\n"
+            )
+
+        if improvement and improvement != "-":
+            feedback_message += (
+                "### 🔧 สิ่งที่ควรเพิ่มเติม\n\n"
+                f"{improvement}\n"
+            )
 
 
         # ======================================
@@ -1746,6 +1944,7 @@ async def on_message(message):
 
             if evaluation_qp and not session.get("reflection_shown"):
                 session["last_understanding_level"] = "GOOD"
+                session["pending_final_status"] = "COMPLETED"
                 session["active_qp"] = evaluation_qp
                 session["phase"] = "EVALUATION_QP"
                 session["reflection_shown"] = False
@@ -1786,6 +1985,7 @@ async def on_message(message):
 
             if evaluation_qp and not session.get("reflection_shown"):
                 session["last_understanding_level"] = level
+                session["pending_final_status"] = "MAX_ATTEMPTS_REACHED"
                 session["active_qp"] = evaluation_qp
                 session["phase"] = "EVALUATION_QP"
                 session["reflection_shown"] = False
