@@ -1,0 +1,43 @@
+﻿Test_ID,Question,Expected_KU,Actual_KU,KU_Result,Expected_LG,Actual_LG,LG_Result,Expected_QP,Actual_QP,QP_Result,Status,Error_Type,Error_Message
+TC01,Algorithm คืออะไร,KU07,KU07,PASS,LG01,LG01,PASS,QP01,,,PASS,,
+TC02,Algorithm ที่ดีเป็นอย่างไร,KU07,KU07,PASS,LG01,LG01,PASS,QP01,,,PASS,,
+TC03,Algorithm สำคัญอย่างไร,KU07,KU07,PASS,LG01,LG01,PASS,QP01,,,PASS,,
+TC04,วิเคราะห์โจทย์ยังไง,KU02,KU01,FAIL,LG02,LG02,PASS,QP02,,,FAIL,,
+TC05,ต้องใช้ข้อมูลอะไร,KU04,KU04,PASS,LG02,LG02,PASS,QP02,,,PASS,,
+TC06,Output คืออะไร,KU03,KU03,PASS,LG02,LG02,PASS,QP02,,,PASS,,
+TC07,วิเคราะห์ครบไหม,KU01–KU06 หรือ KU01 (LG02 Knowledge Scope),,,LG02,,,QP02,,,SYSTEM_ERROR,KNOWLEDGE_RETRIEVAL_FAILED,ไม่พบ Knowledge Unit ที่เกี่ยวข้อง
+TC08,ข้อมูลครบหรือยัง,KU01–KU06 (LG02 Knowledge Scope),,,LG02,,,QP02,,,SYSTEM_ERROR,KNOWLEDGE_RETRIEVAL_FAILED,ไม่พบ Knowledge Unit ที่เกี่ยวข้อง
+TC09,วิเคราะห์ถูกไหม,KU01–KU06 (LG02 Knowledge Scope),,,LG02,,,QP02,,,SYSTEM_ERROR,KNOWLEDGE_RETRIEVAL_FAILED,ไม่พบ Knowledge Unit ที่เกี่ยวข้อง
+TC10,ไม่รู้จะเริ่มเขียน Algorithm ยังไง,KU01–KU06,,,LG03,,,QP03,,,SYSTEM_ERROR,KNOWLEDGE_RETRIEVAL_FAILED,ไม่พบ Knowledge Unit ที่เกี่ยวข้อง
+TC11,จะแก้ปัญหายังไง,KU01–KU06,,,LG03,,,QP03,,,SYSTEM_ERROR,KNOWLEDGE_RETRIEVAL_FAILED,ไม่พบ Knowledge Unit ที่เกี่ยวข้อง
+TC12,แนวทางนี้ครบไหม,KU01–KU06 (Related Knowledge Scope),,,LG03,,,QP03,,,SYSTEM_ERROR,KNOWLEDGE_RETRIEVAL_FAILED,ไม่พบ Knowledge Unit ที่เกี่ยวข้อง
+TC13,แนวทางนี้ถูกไหม,KU01–KU06 (Related Knowledge Scope),,,LG03,,,QP03,,,SYSTEM_ERROR,KNOWLEDGE_RETRIEVAL_FAILED,ไม่พบ Knowledge Unit ที่เกี่ยวข้อง
+TC14,แนวทางนี้ดีไหม,KU01–KU06 (Related Knowledge Scope),,,LG03,,,QP03,,,SYSTEM_ERROR,KNOWLEDGE_RETRIEVAL_FAILED,ไม่พบ Knowledge Unit ที่เกี่ยวข้อง
+TC15,ทำอะไรก่อนหลัง,KU08–KU11,,,LG04,,,QP04,,,SYSTEM_ERROR,KNOWLEDGE_RETRIEVAL_FAILED,ไม่พบ Knowledge Unit ที่เกี่ยวข้อง
+TC16,แล้วทำอะไรต่อ,KU08–KU11,,,LG04,,,QP04,,,SYSTEM_ERROR,KNOWLEDGE_RETRIEVAL_FAILED,ไม่พบ Knowledge Unit ที่เกี่ยวข้อง
+TC17,เรียง Algorithm ยังไง,KU08–KU11,KU08,PASS,LG04,LG04,PASS,QP04,,,PASS,,
+TC18,ขั้นตอนครบไหม,KU08–KU11,,,LG04,,,QP04,,,SYSTEM_ERROR,KNOWLEDGE_RETRIEVAL_FAILED,ไม่พบ Knowledge Unit ที่เกี่ยวข้อง
+TC19,เรียงแบบนี้ถูกไหม,KU08–KU11,,,LG04,,,QP04,,,SYSTEM_ERROR,KNOWLEDGE_RETRIEVAL_FAILED,ไม่พบ Knowledge Unit ที่เกี่ยวข้อง
+TC20,Algorithm นี้ใช้ได้ไหม,KU08–KU11,KU08,PASS,LG04,LG05,FAIL,QP04,,,FAIL,,
+TC21,ช่วยตรวจสอบ Algorithm ให้หน่อย,KU08–KU11 (Algorithm Knowledge Scope),KU08,PASS,LG05,LG05,PASS,QP05,,,PASS,,
+TC22,ผลลัพธ์ถูกไหม,KU08–KU11 (Algorithm Knowledge Scope),,,LG05,,,QP05,,,SYSTEM_ERROR,KNOWLEDGE_RETRIEVAL_FAILED,ไม่พบ Knowledge Unit ที่เกี่ยวข้อง
+TC23,ขั้นตอนไหนผิด,KU08–KU11 (Algorithm Knowledge Scope),,,LG05,,,QP05,,,SYSTEM_ERROR,KNOWLEDGE_RETRIEVAL_FAILED,ไม่พบ Knowledge Unit ที่เกี่ยวข้อง
+TC24,Algorithm นี้ถูกต้องไหม,KU08–KU11 (Algorithm Knowledge Scope),KU08,PASS,LG05,LG05,PASS,QP05,,,PASS,,
+TC25,Sequence คืออะไร,KU09,KU09,PASS,LG06,LG06,PASS,QP06,,,PASS,,
+TC26,ต้องใช้ if ไหม,KU10,KU10,PASS,LG06,LG06,PASS,QP06,,,PASS,,
+TC27,ต้องใช้ Loop ไหม,KU11,KU11,PASS,LG06,LG06,PASS,QP06,,,PASS,,
+TC28,ควรใช้ Sequence Selection หรือ Loop,"KU09, KU10, KU11",KU09,PASS,LG06,LG06,PASS,QP06,,,PASS,,
+TC29,เลือกแบบนี้ถูกไหม,"KU09, KU10, KU11",,,LG06,,,QP06,,,SYSTEM_ERROR,KNOWLEDGE_RETRIEVAL_FAILED,ไม่พบ Knowledge Unit ที่เกี่ยวข้อง
+TC30,ทำไมต้องใช้โครงสร้างนี้,"KU09, KU10, KU11",,,LG06,,,QP06,,,SYSTEM_ERROR,KNOWLEDGE_RETRIEVAL_FAILED,ไม่พบ Knowledge Unit ที่เกี่ยวข้อง
+TC31,Algorithm นี้ควรปรับปรุงตรงไหน,Context-dependent / System Process,KU07,PASS,LG07,LG07,PASS,QP07,,,PASS,,
+TC32,Algorithm มีข้อผิดพลาดไหม,Context-dependent / System Process,,,LG07,,,QP07,,,SYSTEM_ERROR,LEARNING_GOAL_MAPPING_FAILED,พบ Knowledge Unit แต่ไม่พบ Learning Goal
+TC33,มีอะไรต้องแก้ไหม,Context-dependent / System Process,,,LG07,,,QP07,,,SYSTEM_ERROR,KNOWLEDGE_RETRIEVAL_FAILED,ไม่พบ Knowledge Unit ที่เกี่ยวข้อง
+TC34,ช่วยปรับปรุง Algorithm,Context-dependent / System Process,KU07,PASS,LG07,LG07,PASS,QP07,,,PASS,,
+TC35,ทำไมต้องแก้แบบนี้,Context-dependent / System Process,,,LG07,,,QP07,,,SYSTEM_ERROR,KNOWLEDGE_RETRIEVAL_FAILED,ไม่พบ Knowledge Unit ที่เกี่ยวข้อง
+TC36,อยากฝึกออกแบบ Algorithm,KU02,KU07,FAIL,LG08,LG08,PASS,QP08,,,FAIL,,
+TC37,อยากลองทำ Algorithm,KU04,KU07,FAIL,LG08,LG08,PASS,QP08,,,FAIL,,
+TC38,ช่วยให้โจทย์ฝึก Algorithm,KU01–KU11 (Applied Knowledge Scope),KU07,PASS,LG08,LG08,PASS,QP08,,,PASS,,
+TC39,Algorithm ที่ออกแบบครบไหม,Context-dependent / System Process,KU08,PASS,LG08,LG05,FAIL,QP08,,,FAIL,,
+TC40,Algorithm นี้ใช้ได้ไหม,Context-dependent / System Process,KU08,PASS,LG08,LG05,FAIL,QP08,,,FAIL,,
+TC41,Algorithm ที่ทำถูกไหม,Context-dependent + Applied Knowledge,KU08,PASS,LG08,LG05,FAIL,QP08,,,FAIL,,
+TC42,ควรแก้ Algorithm ตรงไหน,Context-dependent / System Process,,,LG08,,,QP08,,,SYSTEM_ERROR,LEARNING_GOAL_MAPPING_FAILED,พบ Knowledge Unit แต่ไม่พบ Learning Goal

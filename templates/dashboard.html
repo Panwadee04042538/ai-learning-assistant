@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>
+        AI Learning Assistant - Teacher Dashboard
+    </title>
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+
+            margin: 0;
+
+            font-family:
+                "Segoe UI",
+                Tahoma,
+                Arial,
+                sans-serif;
+
+            background: #f5f7fb;
+
+            color: #1f2937;
+        }
+
+
+        /* =========================================
+           Header
+        ========================================= */
+
+        .header {
+
+            background: #111827;
+
+            color: white;
+
+            padding: 28px 40px;
+
+        }
+
+        .header-content {
+
+            max-width: 1200px;
+
+            margin: auto;
+
+        }
+
+        .header h1 {
+
+            margin: 0 0 8px 0;
+
+            font-size: 28px;
+
+        }
+
+        .header p {
+
+            margin: 0;
+
+            color: #d1d5db;
+
+            font-size: 14px;
+
+        }
+
+
+        /* =========================================
+           Container
+        ========================================= */
+
+        .container {
+
+            max-width: 1200px;
+
+            margin: 30px auto;
+
+            padding: 0 20px;
+
+        }
+
+
+        /* =========================================
+           Section Title
+        ========================================= */
+
+        .section-title {
+
+            margin: 30px 0 15px 0;
+
+            font-size: 20px;
+
+            font-weight: 700;
+
+        }
+
+
+        /* =========================================
+           Cards
+        ========================================= */
+
+        .cards {
+
+            display: grid;
+
+            grid-template-columns:
+                repeat(4, 1fr);
+
+            gap: 18px;
+
+        }
+
+        .card {
+
+            background: white;
+
+            border-radius: 14px;
+
+            padding: 22px;
+
+            box-shadow:
+                0 2px 8px rgba(
+                    0,
+                    0,
+                    0,
+                    0.06
+                );
+
+            border: 1px solid #e5e7eb;
+
+        }
+
+        .card-title {
+
+            font-size: 14px;
+
+            color: #6b7280;
+
+            margin-bottom: 10px;
+
+        }
+
+        .card-value {
+
+            font-size: 32px;
+
+            font-weight: 700;
+
+        }
+
+        .card-subtitle {
+
+            margin-top: 6px;
+
+            font-size: 12px;
+
+            color: #9ca3af;
+
+        }
+
+
+        /* =========================================
+           Status Cards
+        ========================================= */
+
+        .status-grid {
+
+            display: grid;
+
+            grid-template-columns:
+                repeat(3, 1fr);
+
+            gap: 18px;
+
+        }
+
+        .status-card {
+
+            background: white;
+
+            border-radius: 14px;
+
+            padding: 22px;
+
+            border: 1px solid #e5e7eb;
+
+            box-shadow:
+                0 2px 8px rgba(
+                    0,
+                    0,
+                    0,
+                    0.05
+                );
+
+        }
+
+        .status-label {
+
+            font-size: 14px;
+
+            color: #6b7280;
+
+            margin-bottom: 8px;
+
+        }
+
+        .status-number {
+
+            font-size: 30px;
+
+            font-weight: 700;
+
+        }
+
+        .status-description {
+
+            margin-top: 6px;
+
+            font-size: 12px;
+
+            color: #9ca3af;
+
+        }
+
+
+        /* =========================================
+           Understanding
+        ========================================= */
+
+        .understanding-grid {
+
+            display: grid;
+
+            grid-template-columns:
+                repeat(3, 1fr);
+
+            gap: 18px;
+
+        }
+
+        .understanding-card {
+
+            background: white;
+
+            border-radius: 14px;
+
+            padding: 22px;
+
+            border: 1px solid #e5e7eb;
+
+        }
+
+        .understanding-card h3 {
+
+            margin: 0 0 10px 0;
+
+            font-size: 16px;
+
+        }
+
+        .understanding-number {
+
+            font-size: 30px;
+
+            font-weight: 700;
+
+        }
+
+
+        /* =========================================
+           Two Columns
+        ========================================= */
+
+        .two-columns {
+
+            display: grid;
+
+            grid-template-columns:
+                1fr 1fr;
+
+            gap: 20px;
+
+        }
+
+
+        /* =========================================
+           Panel
+        ========================================= */
+
+        .panel {
+
+            background: white;
+
+            border-radius: 14px;
+
+            padding: 22px;
+
+            border: 1px solid #e5e7eb;
+
+            box-shadow:
+                0 2px 8px rgba(
+                    0,
+                    0,
+                    0,
+                    0.05
+                );
+
+        }
+
+        .panel h2 {
+
+            margin-top: 0;
+
+            font-size: 18px;
+
+        }
+
+
+        /* =========================================
+           LG / KU List
+        ========================================= */
+
+        .stat-list {
+
+            list-style: none;
+
+            padding: 0;
+
+            margin: 0;
+
+        }
+
+        .stat-list li {
+
+            display: flex;
+
+            justify-content:
+                space-between;
+
+            align-items: center;
+
+            padding: 13px 0;
+
+            border-bottom:
+                1px solid #f0f0f0;
+
+        }
+
+        .stat-list li:last-child {
+
+            border-bottom: none;
+
+        }
+
+        .stat-name {
+
+            display: flex;
+
+            flex-direction: column;
+
+            gap: 3px;
+
+        }
+
+        .stat-id {
+
+            font-size: 12px;
+
+            color: #6b7280;
+
+        }
+
+        .stat-title {
+
+            font-size: 14px;
+
+        }
+
+        .stat-count {
+
+            background: #eef2ff;
+
+            padding: 5px 10px;
+
+            border-radius: 20px;
+
+            font-size: 12px;
+
+            font-weight: 600;
+
+        }
+
+
+        /* =========================================
+           Recent Logs
+        ========================================= */
+
+        .log-item {
+
+            border-bottom:
+                1px solid #e5e7eb;
+
+            padding: 16px 0;
+
+        }
+
+        .log-item:last-child {
+
+            border-bottom: none;
+
+        }
+
+        .log-top {
+
+            display: flex;
+
+            justify-content:
+                space-between;
+
+            gap: 15px;
+
+        }
+
+        .student-name {
+
+            font-weight: 600;
+
+        }
+
+        .timestamp {
+
+            font-size: 12px;
+
+            color: #9ca3af;
+
+        }
+
+        .question {
+
+            margin-top: 7px;
+
+            font-size: 14px;
+
+        }
+
+        .log-meta {
+
+            margin-top: 9px;
+
+            display: flex;
+
+            flex-wrap: wrap;
+
+            gap: 7px;
+
+        }
+
+
+        /* =========================================
+           Badge
+        ========================================= */
+
+        .badge {
+
+            display: inline-block;
+
+            padding: 4px 9px;
+
+            border-radius: 20px;
+
+            font-size: 11px;
+
+            font-weight: 600;
+
+        }
+
+        .badge-ku {
+
+            background: #f3f4f6;
+
+            color: #374151;
+
+        }
+
+        .badge-lg {
+
+            background: #eef2ff;
+
+            color: #3730a3;
+
+        }
+
+        .badge-good {
+
+            background: #dcfce7;
+
+            color: #166534;
+
+        }
+
+        .badge-partial {
+
+            background: #fef3c7;
+
+            color: #92400e;
+
+        }
+
+        .badge-needs {
+
+            background: #fee2e2;
+
+            color: #991b1b;
+
+        }
+
+        .badge-completed {
+
+            background: #dcfce7;
+
+            color: #166534;
+
+        }
+
+        .badge-max {
+
+            background: #fee2e2;
+
+            color: #991b1b;
+
+        }
+
+        .badge-progress {
+
+            background: #e0e7ff;
+
+            color: #3730a3;
+
+        }
+
+
+        /* =========================================
+           Empty
+        ========================================= */
+
+        .empty {
+
+            color: #9ca3af;
+
+            font-size: 14px;
+
+            padding: 20px 0;
+
+        }
+
+
+        /* =========================================
+           Footer
+        ========================================= */
+
+        .footer {
+
+            text-align: center;
+
+            padding: 30px;
+
+            color: #9ca3af;
+
+            font-size: 12px;
+
+        }
+
+
+        /* =========================================
+           Responsive
+        ========================================= */
+
+        @media (max-width: 900px) {
+
+            .cards {
+
+                grid-template-columns:
+                    repeat(2, 1fr);
+
+            }
+
+            .status-grid {
+
+                grid-template-columns:
+                    1fr;
+
+            }
+
+            .understanding-grid {
+
+                grid-template-columns:
+                    1fr;
+
+            }
+
+            .two-columns {
+
+                grid-template-columns:
+                    1fr;
+
+            }
+
+        }
+
+
+        @media (max-width: 600px) {
+
+            .header {
+
+                padding: 22px;
+
+            }
+
+            .container {
+
+                margin-top: 20px;
+
+                padding: 0 15px;
+
+            }
+
+            .cards {
+
+                grid-template-columns:
+                    1fr;
+
+            }
+
+            .log-top {
+
+                flex-direction:
+                    column;
+
+            }
+
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+<!-- =========================================
+     Header
+========================================= -->
+
+<header class="header">
+
+    <div class="header-content">
+
+        <h1>
+            🤖 AI Learning Assistant
+        </h1>
+
+        <p>
+            Teacher Dashboard — ระบบติดตามการเรียนรู้และ Adaptive Learning
+        </p>
+
+    </div>
+
+</header>
+
+
+<!-- =========================================
+     Main Container
+========================================= -->
+
+<main class="container">
+
+
+    <!-- =====================================
+         Overview
+    ====================================== -->
+
+    <div class="section-title">
+        📊 ภาพรวมการเรียนรู้
+    </div>
+
+
+    <div class="cards">
+
+
+        <div class="card">
+
+            <div class="card-title">
+                Learning Sessions
+            </div>
+
+            <div class="card-value">
+                {{ total_sessions }}
+            </div>
+
+            <div class="card-subtitle">
+                จำนวนรอบการเรียนรู้ทั้งหมด
+            </div>
+
+        </div>
+
+
+        <div class="card">
+
+            <div class="card-title">
+                Students
+            </div>
+
+            <div class="card-value">
+                {{ total_students }}
+            </div>
+
+            <div class="card-subtitle">
+                จำนวนผู้เรียน
+            </div>
+
+        </div>
+
+
+        <div class="card">
+
+            <div class="card-title">
+                Attempts
+            </div>
+
+            <div class="card-value">
+                {{ total_attempts }}
+            </div>
+
+            <div class="card-subtitle">
+                จำนวนครั้งที่ผู้เรียนตอบ
+            </div>
+
+        </div>
+
+
+        <div class="card">
+
+            <div class="card-title">
+                Learning Goals
+            </div>
+
+            <div class="card-value">
+                {{ total_lg }}
+            </div>
+
+            <div class="card-subtitle">
+                จำนวน Learning Goal ที่ถูกใช้งาน
+            </div>
+
+        </div>
+
+
+    </div>
+
+
+    <!-- =====================================
+         Session Status
+    ====================================== -->
+
+    <div class="section-title">
+        🔄 สถานะการเรียนรู้
+    </div>
+
+
+    <div class="status-grid">
+
+
+        <div class="status-card">
+
+            <div class="status-label">
+                COMPLETED
+            </div>
+
+            <div class="status-number">
+                {{ completed_sessions }}
+            </div>
+
+            <div class="status-description">
+                ผู้เรียนจบกระบวนการเรียนรู้
+            </div>
+
+        </div>
+
+
+        <div class="status-card">
+
+            <div class="status-label">
+                MAX ATTEMPTS REACHED
+            </div>
+
+            <div class="status-number">
+                {{ max_attempt_sessions }}
+            </div>
+
+            <div class="status-description">
+                ผู้เรียนตอบครบจำนวนครั้งที่กำหนด
+            </div>
+
+        </div>
+
+
+        <div class="status-card">
+
+            <div class="status-label">
+                IN PROGRESS
+            </div>
+
+            <div class="status-number">
+                {{ in_progress_sessions }}
+            </div>
+
+            <div class="status-description">
+                Session ที่ยังอยู่ระหว่างการเรียนรู้
+            </div>
+
+        </div>
+
+
+    </div>
+
+
+    <!-- =====================================
+         Understanding
+    ====================================== -->
+
+    <div class="section-title">
+        🧠 ระดับความเข้าใจของผู้เรียน
+    </div>
+
+
+    <div class="understanding-grid">
+
+
+        <div class="understanding-card">
+
+            <h3>
+                🟢 GOOD
+            </h3>
+
+            <div class="understanding-number">
+                {{ good_count }}
+            </div>
+
+            <div class="status-description">
+                เข้าใจแนวคิดตาม Learning Goal
+            </div>
+
+        </div>
+
+
+        <div class="understanding-card">
+
+            <h3>
+                🟡 PARTIAL
+            </h3>
+
+            <div class="understanding-number">
+                {{ partial_count }}
+            </div>
+
+            <div class="status-description">
+                เข้าใจบางส่วนและได้รับคำใบ้
+            </div>
+
+        </div>
+
+
+        <div class="understanding-card">
+
+            <h3>
+                🔴 NEEDS IMPROVEMENT
+            </h3>
+
+            <div class="understanding-number">
+                {{ needs_improvement_count }}
+            </div>
+
+            <div class="status-description">
+                ต้องทบทวนและได้รับคำอธิบายเพิ่มเติม
+            </div>
+
+        </div>
+
+
+    </div>
+
+
+    <!-- =====================================
+         LG / KU
+    ====================================== -->
+
+    <div class="section-title">
+        📚 การใช้งานเนื้อหา
+    </div>
+
+
+    <div class="two-columns">
+
+
+        <!-- =================================
+             Learning Goals
+        ================================== -->
+
+        <div class="panel">
+
+            <h2>
+                Learning Goals
+            </h2>
+
+
+            {% if lg_stats %}
+
+                <ul class="stat-list">
+
+                    {% for lg in lg_stats %}
+
+                        <li>
+
+                            <div class="stat-name">
+
+                                <span class="stat-id">
+                                    {{ lg.id }}
+                                </span>
+
+                                <span class="stat-title">
+                                    {{ lg.name }}
+                                </span>
+
+                            </div>
+
+                            <span class="stat-count">
+                                {{ lg.count }} sessions
+                            </span>
+
+                        </li>
+
+                    {% endfor %}
+
+                </ul>
+
+            {% else %}
+
+                <div class="empty">
+                    ยังไม่มีข้อมูล Learning Goal
+                </div>
+
+            {% endif %}
+
+        </div>
+
+
+        <!-- =================================
+             Knowledge Units
+        ================================== -->
+
+        <div class="panel">
+
+            <h2>
+                Knowledge Units
+            </h2>
+
+
+            {% if ku_stats %}
+
+                <ul class="stat-list">
+
+                    {% for ku in ku_stats %}
+
+                        <li>
+
+                            <div class="stat-name">
+
+                                <span class="stat-id">
+                                    {{ ku.id }}
+                                </span>
+
+                                <span class="stat-title">
+                                    {{ ku.name }}
+                                </span>
+
+                            </div>
+
+                            <span class="stat-count">
+                                {{ ku.count }} sessions
+                            </span>
+
+                        </li>
+
+                    {% endfor %}
+
+                </ul>
+
+            {% else %}
+
+                <div class="empty">
+                    ยังไม่มีข้อมูล Knowledge Unit
+                </div>
+
+            {% endif %}
+
+        </div>
+
+
+    </div>
+
+
+    <!-- =====================================
+         Recent Learning Sessions
+    ====================================== -->
+
+    <div class="section-title">
+        🕒 Learning Sessions ล่าสุด
+    </div>
+
+
+    <div class="panel">
+
+
+        {% if recent_logs %}
+
+
+            {% for log in recent_logs %}
+
+                <div class="log-item">
+
+
+                    <div class="log-top">
+
+                        <div class="student-name">
+
+                            👤
+                            {{ log.username or "Unknown Student" }}
+
+                        </div>
+
+
+                        <div class="timestamp">
+
+                            {{ log.timestamp }}
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="question">
+
+                        <strong>
+                            คำถาม:
+                        </strong>
+
+                        {{ log.user_question }}
+
+                    </div>
+
+
+                    <div class="log-meta">
+
+
+                        <!-- KU -->
+
+                        {% if log.knowledge_unit %}
+
+                            <span class="badge badge-ku">
+
+                                KU:
+                                {{ log.knowledge_unit.ku_id }}
+
+                            </span>
+
+                        {% endif %}
+
+
+                        <!-- LG -->
+
+                        {% if log.learning_goal %}
+
+                            <span class="badge badge-lg">
+
+                                LG:
+                                {{ log.learning_goal.lg_id }}
+
+                            </span>
+
+                        {% endif %}
+
+
+                        <!-- Final Understanding -->
+
+                        {% if log.final_understanding_level == "GOOD" %}
+
+                            <span class="badge badge-good">
+
+                                GOOD
+
+                            </span>
+
+                        {% elif log.final_understanding_level == "PARTIAL" %}
+
+                            <span class="badge badge-partial">
+
+                                PARTIAL
+
+                            </span>
+
+                        {% elif log.final_understanding_level == "NEEDS_IMPROVEMENT" %}
+
+                            <span class="badge badge-needs">
+
+                                NEEDS IMPROVEMENT
+
+                            </span>
+
+                        {% endif %}
+
+
+                        <!-- Final Status -->
+
+                        {% if log.final_status == "COMPLETED" %}
+
+                            <span class="badge badge-completed">
+
+                                COMPLETED
+
+                            </span>
+
+                        {% elif log.final_status == "MAX_ATTEMPTS_REACHED" %}
+
+                            <span class="badge badge-max">
+
+                                MAX ATTEMPTS
+
+                            </span>
+
+                        {% elif log.final_status == "IN_PROGRESS" %}
+
+                            <span class="badge badge-progress">
+
+                                IN PROGRESS
+
+                            </span>
+
+                        {% endif %}
+
+
+                        <!-- Attempts -->
+
+                        <span class="badge badge-ku">
+
+                            Attempts:
+                            {{ log.attempt_count or 0 }}
+
+                        </span>
+
+
+                    </div>
+
+
+                    <!-- Selected Question -->
+
+                    {% if log.selected_question %}
+
+                        <div
+                            style="
+                                margin-top: 12px;
+                                padding: 12px;
+                                background: #f9fafb;
+                                border-radius: 8px;
+                                font-size: 13px;
+                            "
+                        >
+
+                            <strong>
+                                💭 System Question:
+                            </strong>
+
+                            {{ log.selected_question.system_question }}
+
+                        </div>
+
+                    {% endif %}
+
+
+                </div>
+
+            {% endfor %}
+
+
+        {% else %}
+
+            <div class="empty">
+
+                ยังไม่มี Learning Session
+
+            </div>
+
+        {% endif %}
+
+
+    </div>
+
+
+</main>
+
+
+<!-- =========================================
+     Footer
+========================================= -->
+
+<footer class="footer">
+
+    AI Learning Assistant
+    · Teacher Dashboard
+
+</footer>
+
+
+</body>
+
+</html>

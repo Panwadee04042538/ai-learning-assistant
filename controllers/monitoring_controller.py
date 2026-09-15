@@ -10,7 +10,7 @@ from database import (
     save_response,
 )
 
-from gemini_service import ask_gemini
+from typhoon_service import ask_ai
 from monitoring import MonitoringSession
 
 logger = logging.getLogger(__name__)
@@ -307,7 +307,7 @@ async def start_monitoring(
             try:
 
                 feedback = await asyncio.to_thread(
-                    ask_gemini,
+                    ask_ai,
                     prompt
                 )
 

@@ -5,7 +5,15 @@ from controllers.monitoring_controller import start_monitoring
 from controllers.evaluation_controller import start_evaluation
 
 
-async def run_phase(bot, ctx, phase, topic, send_long_message=None):
+async def run_phase(
+    bot,
+    ctx,
+    phase,
+    topic,
+    goal_id=None,
+    algorithm_goals=None,
+    send_long_message=None
+):
     """
     เรียก Controller ของแต่ละ Metacognitive Phase
     """
@@ -20,24 +28,23 @@ async def run_phase(bot, ctx, phase, topic, send_long_message=None):
 
     elif phase == "Monitoring":
         result = await start_monitoring(
-        bot=bot,
-        ctx=ctx,
-        topic=topic,
-        send_long_message=send_long_message
-    )
-    if result is not True:
-        return False
+            bot=bot,
+            ctx=ctx,
+            topic=topic,
+            send_long_message=send_long_message
+        )
+        if result is not True:
+            return False
 
     elif phase == "Evaluation":
         result = await start_evaluation(
-        bot=bot,
-        ctx=ctx,
-        topic=topic,
-        goal_id=goal_id,
-        qp=algorithm_goals[goal_id]["qp"],
-        send_long_message=send_long_message
-)
-
+            bot=bot,
+            ctx=ctx,
+            topic=topic,
+            goal_id=goal_id,
+            qp=algorithm_goals[goal_id]["qp"],
+            send_long_message=send_long_message
+        )
         if result is not True:
             return False
 
@@ -83,6 +90,8 @@ async def run_learning_flow(
             ctx=ctx,
             phase=phase,
             topic=topic,
+            goal_id=goal_id,
+            algorithm_goals=algorithm_goals,
             send_long_message=send_long_message
         )
 

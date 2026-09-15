@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python test_hint_service.py)",
+      "Bash(python test_runner.py)",
+      "Bash(git stash *)",
+      "Bash(git checkout *)"
+    ]
+  }
+}

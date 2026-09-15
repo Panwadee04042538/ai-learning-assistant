@@ -3,7 +3,7 @@ import logging
 import time
 
 from evaluation import EvaluationSession
-from gemini_service import ask_gemini
+from typhoon_service import ask_ai
 
 from database import (
     get_or_create_user,
@@ -293,7 +293,7 @@ async def start_evaluation(
         try:
 
             feedback = await asyncio.to_thread(
-                ask_gemini,
+                ask_ai,
                 prompt
             )
 

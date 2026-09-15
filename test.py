@@ -50,7 +50,7 @@ print(session.get_result())
 
 
 from planning import PlanningSession
-from gemini_service import ask_gemini
+from gemini_service import ask_ai
 
 session = PlanningSession("algorithm")
 
@@ -66,7 +66,7 @@ print("\nกำลังวิเคราะห์...\n")
 
 prompt = session.build_prompt()
 
-feedback = ask_gemini(prompt)
+feedback = ask_ai(prompt)
 
 print(feedback)
 """

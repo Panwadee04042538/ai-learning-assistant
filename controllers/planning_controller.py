@@ -3,7 +3,7 @@ import logging
 import time
 
 from database import create_session, finish_session, get_or_create_user, save_feedback, save_response
-from gemini_service import ask_reflection, ask_summary
+from typhoon_service import ask_reflection, ask_summary
 from planning import PlanningSession
 
 logger = logging.getLogger(__name__)
