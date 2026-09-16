@@ -282,7 +282,7 @@
       "question_id": "Q21",
       "lg_id": "LG05",
       "qp_id": "QP05",
-      "related_ku": "KU08–KU11 (Algorithm Knowledge Scope)",
+      "related_ku": "KU08–KU11, KU12 (Algorithm Knowledge Scope)",
       "triggers": [
         "ช่วยตรวจสอบ Algorithm ให้หน่อย",
         "Algorithm ถูกไหม"
@@ -296,7 +296,7 @@
       "question_id": "Q22",
       "lg_id": "LG05",
       "qp_id": "QP05",
-      "related_ku": "KU08–KU11 (Algorithm Knowledge Scope)",
+      "related_ku": "KU08–KU11, KU12 (Algorithm Knowledge Scope)",
       "triggers": [
         "ผลลัพธ์ถูกไหม",
         "Algorithm ทำงานยังไง"
@@ -310,7 +310,7 @@
       "question_id": "Q23",
       "lg_id": "LG05",
       "qp_id": "QP05",
-      "related_ku": "KU08–KU11 (Algorithm Knowledge Scope)",
+      "related_ku": "KU08–KU11, KU12 (Algorithm Knowledge Scope)",
       "triggers": [
         "ขั้นตอนไหนผิด",
         "ทำไมผลลัพธ์ไม่ตรง"
@@ -324,7 +324,7 @@
       "question_id": "Q24",
       "lg_id": "LG05",
       "qp_id": "QP05",
-      "related_ku": "KU08–KU11 (Algorithm Knowledge Scope)",
+      "related_ku": "KU08–KU11, KU12 (Algorithm Knowledge Scope)",
       "triggers": [
         "Algorithm นี้ถูกต้องไหม"
       ],
@@ -418,7 +418,7 @@
       "question_id": "Q31",
       "lg_id": "LG07",
       "qp_id": "QP07",
-      "related_ku": "Context-dependent / System Process",
+      "related_ku": "KU13",
       "triggers": [
         "Algorithm นี้ควรปรับปรุงตรงไหน"
       ],
@@ -431,7 +431,7 @@
       "question_id": "Q32",
       "lg_id": "LG07",
       "qp_id": "QP07",
-      "related_ku": "Context-dependent / System Process",
+      "related_ku": "KU13",
       "triggers": [
         "Algorithm มีข้อผิดพลาดไหม"
       ],
@@ -444,7 +444,7 @@
       "question_id": "Q33",
       "lg_id": "LG07",
       "qp_id": "QP07",
-      "related_ku": "Context-dependent / System Process",
+      "related_ku": "KU13",
       "triggers": [
         "มีอะไรต้องแก้ไหม"
       ],
@@ -457,7 +457,7 @@
       "question_id": "Q34",
       "lg_id": "LG07",
       "qp_id": "QP07",
-      "related_ku": "Context-dependent / System Process",
+      "related_ku": "KU13",
       "triggers": [
         "ช่วยปรับปรุง Algorithm"
       ],
@@ -470,7 +470,7 @@
       "question_id": "Q35",
       "lg_id": "LG07",
       "qp_id": "QP07",
-      "related_ku": "Context-dependent / System Process",
+      "related_ku": "KU13",
       "triggers": [
         "ทำไมต้องแก้แบบนี้"
       ],
@@ -483,7 +483,7 @@
       "question_id": "Q36",
       "lg_id": "LG08",
       "qp_id": "QP08",
-      "related_ku": "KU02",
+      "related_ku": "KU02, KU14",
       "triggers": [
         "อยากฝึกออกแบบ Algorithm",
         "ขอโจทย์ Algorithm"
@@ -497,7 +497,7 @@
       "question_id": "Q37",
       "lg_id": "LG08",
       "qp_id": "QP08",
-      "related_ku": "KU04",
+      "related_ku": "KU04, KU14",
       "triggers": [
         "อยากลองทำ Algorithm"
       ],
@@ -510,7 +510,7 @@
       "question_id": "Q38",
       "lg_id": "LG08",
       "qp_id": "QP08",
-      "related_ku": "KU01–KU11 (Applied Knowledge Scope)",
+      "related_ku": "KU01–KU11, KU14 (Applied Knowledge Scope)",
       "triggers": [
         "ช่วยให้โจทย์ฝึก Algorithm"
       ],
@@ -523,7 +523,7 @@
       "question_id": "Q39",
       "lg_id": "LG08",
       "qp_id": "QP08",
-      "related_ku": "Context-dependent / System Process",
+      "related_ku": "Context-dependent / System Process, KU14",
       "triggers": [
         "Algorithm ที่ออกแบบครบไหม"
       ],
@@ -536,7 +536,7 @@
       "question_id": "Q40",
       "lg_id": "LG08",
       "qp_id": "QP08",
-      "related_ku": "Context-dependent / System Process",
+      "related_ku": "Context-dependent / System Process, KU14",
       "triggers": [
         "Algorithm นี้ใช้ได้ไหม"
       ],
@@ -549,7 +549,7 @@
       "question_id": "Q41",
       "lg_id": "LG08",
       "qp_id": "QP08",
-      "related_ku": "Context-dependent + Applied Knowledge",
+      "related_ku": "Context-dependent + Applied Knowledge, KU14",
       "triggers": [
         "Algorithm ที่ทำถูกไหม"
       ],
@@ -562,7 +562,7 @@
       "question_id": "Q42",
       "lg_id": "LG08",
       "qp_id": "QP08",
-      "related_ku": "Context-dependent / System Process",
+      "related_ku": "Context-dependent / System Process, KU14",
       "triggers": [
         "ควรแก้ Algorithm ตรงไหน"
       ],
