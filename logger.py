@@ -638,6 +638,100 @@ def get_user_learning_logs(user_id):
 
 
 # ==========================================
+# Problem Bank Delivery Log
+# ==========================================
+#
+# บันทึกว่าผู้เรียนคนใดได้รับโจทย์ข้อไหนจากคลังปัญหา (!problem)
+# เก็บแยกจาก learning_logs.json เพราะเป็นข้อมูลคนละโครงสร้าง
+# (learning_logs.json ผูกกับ session ของ Adaptive Learning)
+
+PROBLEM_LOG_PATH = os.path.join(
+    BASE_DIR,
+    "data",
+    "problem_logs.json"
+)
+
+
+def load_problem_logs():
+    """โหลดประวัติการรับโจทย์จากคลังปัญหา"""
+
+    if not os.path.exists(PROBLEM_LOG_PATH):
+        return []
+
+    try:
+        with open(
+            PROBLEM_LOG_PATH,
+            "r",
+            encoding="utf-8"
+        ) as file:
+
+            logs = json.load(file)
+
+            if not isinstance(logs, list):
+                return []
+
+            return logs
+
+    except (json.JSONDecodeError, FileNotFoundError):
+        return []
+
+
+def save_problem_logs(logs):
+    """บันทึกประวัติการรับโจทย์ สร้างโฟลเดอร์ data/ ให้ถ้ายังไม่มี"""
+
+    os.makedirs(
+        os.path.dirname(PROBLEM_LOG_PATH),
+        exist_ok=True
+    )
+
+    with open(
+        PROBLEM_LOG_PATH,
+        "w",
+        encoding="utf-8"
+    ) as file:
+
+        json.dump(
+            logs,
+            file,
+            ensure_ascii=False,
+            indent=2
+        )
+
+
+def add_problem_log(
+    user_id,
+    username,
+    problem_id,
+    round_number=None,
+    student_id=None
+):
+    """
+    บันทึกว่าผู้เรียนได้รับโจทย์ข้อไหนจากคลังปัญหา
+
+    Returns
+    -------
+    dict
+        รายการ log ที่บันทึกใหม่
+    """
+
+    logs = load_problem_logs()
+
+    entry = {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "user_id": str(user_id),
+        "username": username,
+        "student_id": student_id,
+        "problem_id": problem_id,
+        "round": round_number
+    }
+
+    logs.append(entry)
+    save_problem_logs(logs)
+
+    return entry
+
+
+# ==========================================
 # Get Learning Statistics
 # ==========================================
 

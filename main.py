@@ -45,12 +45,17 @@ from logger import (
     update_learning_log,
     complete_learning_session,
     add_metacognitive_response,
-    add_hint_usage
+    add_hint_usage,
+    add_problem_log
 )
 from services.registry_service import (
     get_student_id,
     register_student,
     is_registered
+)
+from services.problem_service import (
+    get_problem,
+    format_problem_message
 )
 
 
@@ -1908,6 +1913,51 @@ async def alg(ctx, *, question=None):
         ctx,
         question
     )
+
+
+# ==================================================
+# Problem Bank Command
+# ==================================================
+
+PROBLEM_ID_HELP_MESSAGE = (
+    "❌ ไม่พบโจทย์รหัสนี้ในคลังปัญหา\n\n"
+    "รหัสโจทย์มีตั้งแต่ P01-P15 (P13-P15 เป็นโจทย์สำรอง)\n"
+    "ตัวอย่าง: `!problem P01`"
+)
+
+
+@bot.command()
+async def problem(ctx, problem_id=None):
+
+    if not is_registered(ctx.author.id):
+        await ctx.send(REGISTRATION_REQUIRED_MESSAGE)
+        return
+
+    if not problem_id or not problem_id.strip():
+        await ctx.send(
+            "⚠️ กรุณาระบุรหัสโจทย์ เช่น `!problem P01`"
+        )
+        return
+
+    found_problem = get_problem(problem_id.strip())
+
+    if not found_problem:
+        await ctx.send(PROBLEM_ID_HELP_MESSAGE)
+        return
+
+    await send_long_message(
+        ctx,
+        format_problem_message(found_problem)
+    )
+
+    add_problem_log(
+        user_id=ctx.author.id,
+        username=str(ctx.author),
+        problem_id=found_problem.get("id"),
+        round_number=found_problem.get("round"),
+        student_id=get_student_id(ctx.author.id)
+    )
+
 
 # ==================================================
 # Student Answer Listener
