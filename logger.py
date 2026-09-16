@@ -129,7 +129,9 @@ def add_learning_log(
     qp_id=None,
     question_id=None,
 
-    system_question=None
+    system_question=None,
+
+    student_id=None
 ):
     """
     สร้าง Learning Log ใหม่
@@ -181,6 +183,8 @@ def add_learning_log(
         "user_id": str(user_id),
 
         "username": username,
+
+        "student_id": student_id,
 
 
         # ----------------------------------

@@ -47,6 +47,11 @@ from logger import (
     add_metacognitive_response,
     add_hint_usage
 )
+from services.registry_service import (
+    get_student_id,
+    register_student,
+    is_registered
+)
 
 
 # ==================================================
@@ -168,6 +173,85 @@ async def hello(ctx):
 
     await ctx.send(
         "👋 สวัสดีครับ ผมคือ AI Learning Assistant"
+    )
+
+
+# ==================================================
+# Register Command
+# ==================================================
+
+@bot.command()
+async def register(ctx, *, student_id=None):
+
+    if not student_id or not student_id.strip():
+        await ctx.send(
+            "กรุณาระบุรหัสนักเรียน เช่น !register 12345"
+        )
+        return
+
+    student_id = student_id.strip()
+    user_id = ctx.author.id
+
+    existing_student_id = get_student_id(user_id)
+
+    # ลงทะเบียนด้วยรหัสเดิมซ้ำ -> ไม่ต้องยืนยันอะไร
+    if existing_student_id == student_id:
+        pending_registration_changes.pop(user_id, None)
+        await ctx.send(
+            f"คุณลงทะเบียนด้วยรหัส {student_id} ไว้แล้ว"
+        )
+        return
+
+    # ลงทะเบียนไปแล้วแต่ขอเปลี่ยนเป็นรหัสใหม่ -> ต้องยืนยันก่อน
+    if existing_student_id is not None:
+        pending_registration_changes[user_id] = student_id
+        await ctx.send(
+            f"ลงทะเบียนแล้วด้วยรหัส {existing_student_id} "
+            f"ต้องการเปลี่ยนเป็น {student_id} หรือไม่ พิมพ์ยืนยันเพื่อเปลี่ยน"
+        )
+        return
+
+    # ยังไม่เคยลงทะเบียน -> ลงทะเบียนใหม่ได้เลย
+    pending_registration_changes.pop(user_id, None)
+    success = register_student(user_id, student_id)
+
+    if not success:
+        await ctx.send(
+            "รหัสนี้ถูกลงทะเบียนไปแล้ว กรุณาติดต่อครู"
+        )
+        return
+
+    await ctx.send(
+        f"✅ ลงทะเบียนสำเร็จด้วยรหัสนักเรียน {student_id}"
+    )
+
+
+async def handle_registration_confirmation(message):
+    """ประมวลผลคำตอบยืนยันการเปลี่ยนรหัสนักเรียน"""
+
+    user_id = message.author.id
+    text = message.content.strip()
+    new_student_id = pending_registration_changes.pop(user_id, None)
+
+    if new_student_id is None:
+        return
+
+    if text.lower() != "ยืนยัน":
+        await message.channel.send(
+            "ยกเลิกการเปลี่ยนรหัสนักเรียน ยังคงใช้รหัสเดิมอยู่"
+        )
+        return
+
+    success = register_student(user_id, new_student_id)
+
+    if not success:
+        await message.channel.send(
+            "รหัสนี้ถูกลงทะเบียนไปแล้ว กรุณาติดต่อครู"
+        )
+        return
+
+    await message.channel.send(
+        f"✅ เปลี่ยนรหัสนักเรียนเป็น {new_student_id} สำเร็จ"
     )
 
 
@@ -509,7 +593,12 @@ def detect_learning_goal(question):
 
 
 pending_learning_sessions = {}
+pending_registration_changes = {}
 MAX_ATTEMPTS = 3
+
+REGISTRATION_REQUIRED_MESSAGE = (
+    "กรุณาลงทะเบียนก่อนใช้งาน พิมพ์ !register <รหัสนักเรียน> เช่น !register 12345"
+)
 
 # ==================================================
 # Allowed Knowledge Units Helper
@@ -1154,6 +1243,10 @@ async def start_algorithm_flow(ctx, question=None):
     Display Result
     """
 
+    if not is_registered(ctx.author.id):
+        await ctx.send(REGISTRATION_REQUIRED_MESSAGE)
+        return
+
     if is_practice_request(question):
 
         practice_prompt = f"""
@@ -1242,7 +1335,8 @@ async def start_algorithm_flow(ctx, question=None):
             lg_name="ฝึกออกแบบ Algorithm จากสถานการณ์",
             qp_id=planning_qp.get("qp_id") if planning_qp else None,
             question_id="PRACTICE",
-            system_question=practice_answer
+            system_question=practice_answer,
+            student_id=get_student_id(ctx.author.id)
         )
 
         pending_learning_sessions[ctx.author.id] = {
@@ -1629,7 +1723,9 @@ Learning Goal:
 
             system_question=learning_question.get(
                 "system_question"
-            )
+            ),
+
+            student_id=get_student_id(ctx.author.id)
         )
 
 
@@ -1839,6 +1935,30 @@ async def on_message(message):
     if message.author.bot:
         return
 
+    user_id = message.author.id
+
+    # ----------------------------------------------
+    # Registration Change Confirmation
+    # (ต้องเช็คก่อนอย่างอื่นเสมอ เผื่อผู้เรียนกำลังตอบยืนยัน)
+    # ----------------------------------------------
+    if user_id in pending_registration_changes:
+        await handle_registration_confirmation(message)
+        return
+
+    # ----------------------------------------------
+    # !register ต้องใช้ได้เสมอ ไม่ว่าจะลงทะเบียนแล้วหรือยัง
+    # ----------------------------------------------
+    if message.content.strip().lower().startswith("!register"):
+        await bot.process_commands(message)
+        return
+
+    # ----------------------------------------------
+    # บังคับลงทะเบียนก่อนใช้งานอย่างอื่นทั้งหมด
+    # ----------------------------------------------
+    if not is_registered(user_id):
+        await message.channel.send(REGISTRATION_REQUIRED_MESSAGE)
+        return
+
     # ----------------------------------------------
     # Allow Discord Commands
     # ----------------------------------------------
@@ -1849,8 +1969,6 @@ async def on_message(message):
     # ----------------------------------------------
     # Check Pending Learning Session
     # ----------------------------------------------
-    user_id = message.author.id
-
     if user_id not in pending_learning_sessions:
         await bot.process_commands(message)
         return

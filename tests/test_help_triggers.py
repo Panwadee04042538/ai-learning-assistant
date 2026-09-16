@@ -26,6 +26,7 @@ os.environ.setdefault("DISCORD_TOKEN", "test")
 import logger  # noqa: E402
 import main    # noqa: E402
 from main import detect_help_trigger  # noqa: E402
+import services.registry_service as registry_service  # noqa: E402
 
 
 class FakeMessage:
@@ -90,10 +91,20 @@ class HelpTriggerFlowTest(unittest.TestCase):
         self.log_path = os.path.join(self.tmpdir, "learning_logs.json")
         self.log_patch = patch.object(logger, "LOG_PATH", self.log_path)
         self.log_patch.start()
+
+        self.registry_path = os.path.join(
+            self.tmpdir, "student_registry.json"
+        )
+        self.registry_patch = patch.object(
+            registry_service, "REGISTRY_PATH", self.registry_path
+        )
+        self.registry_patch.start()
+
         main.pending_learning_sessions.clear()
 
         self.channel = FakeChannel()
         self.author = FakeAuthor()
+        registry_service.register_student(self.author.id, "S-0002")
 
         # Session จำลองระหว่างตอบคำถาม Algorithm (มี hint_question_id ของ Q39
         # ซึ่งมีคำใบ้ครบ 3 ระดับใน hint_bank.json)
@@ -130,6 +141,7 @@ class HelpTriggerFlowTest(unittest.TestCase):
 
     def tearDown(self):
         self.log_patch.stop()
+        self.registry_patch.stop()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def _send(self, text):
