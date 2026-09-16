@@ -17,7 +17,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 
 from ui import MainMenu
-from config import QUESTION_BANK_PATH
+from config import QUESTION_BANK_PATH, DEBUG_MODE
 from typhoon_service import (
     ask_ai,
     ask_grounded_answer,
@@ -1101,6 +1101,55 @@ def detect_help_trigger(text):
     return None
 
 
+# ==================================================
+# Revise Request (ย้อนกลับจากขั้นประเมิน)
+# ==================================================
+# ทำงานเฉพาะตอน session อยู่ใน phase EVALUATION_QP เท่านั้น จึงตรวจแยก
+# จาก Help Triggers และต้องเช็คก่อน Help Triggers เสมอ (ไม่มีคำซ้ำกัน
+# กับ STUCK/STILL_STUCK/ANSWER_REQUEST/QUIT_REQUEST อยู่แล้ว)
+
+REVISE_TRIGGER_PATTERNS = ["ขอแก้ไข", "ย้อนกลับ", "แก้คำตอบ"]
+
+
+def detect_revise_trigger(text):
+    """ตรวจจับข้อความขอย้อนกลับไปแก้ Algorithm ระหว่างขั้นประเมิน"""
+
+    if not text:
+        return False
+
+    normalized = text.strip()
+
+    if not normalized:
+        return False
+
+    return any(
+        pattern in normalized
+        for pattern in REVISE_TRIGGER_PATTERNS
+    )
+
+
+async def handle_revise_request(message, session):
+    """
+    โหมด REVISE_REQUEST: ให้ผู้เรียนย้อนกลับไปแก้ Algorithm ได้ 1 ครั้ง
+    ต่อ session โดยกลับไปที่ phase MONITORING_QP
+    """
+
+    if session.get("has_returned"):
+        await send_long_message(
+            message.channel,
+            "### 🚫 ย้อนกลับได้แค่ 1 ครั้งต่อ session แล้วค่อยส่งคำตอบสุดท้าย"
+        )
+        return
+
+    session["has_returned"] = True
+    session["phase"] = "MONITORING_QP"
+
+    await send_long_message(
+        message.channel,
+        "### 🔁 กลับไปแก้ Algorithm ได้ 1 ครั้ง"
+    )
+
+
 def _current_question_text(session):
     """ข้อความคำถามปัจจุบันของ session ไม่ว่าจะอยู่ Phase ใด"""
 
@@ -1792,16 +1841,19 @@ Learning Goal:
         f"**KU:** {ku_id}\n"
 
         f"**หัวข้อ:** {title}\n"
-
-        f"**Matched Term:** "
-        f"`{matched_term}`\n"
-
-        f"**Match Type:** "
-        f"{match_type}\n"
-
-        f"**Score:** "
-        f"{score}\n"
     )
+
+    if DEBUG_MODE:
+        message += (
+            f"**Matched Term:** "
+            f"`{matched_term}`\n"
+
+            f"**Match Type:** "
+            f"{match_type}\n"
+
+            f"**Score:** "
+            f"{score}\n"
+        )
 
 
     # ----------------------------------------------
@@ -1886,10 +1938,11 @@ Learning Goal:
     # Success
     # ----------------------------------------------
 
-    message += (
+    if DEBUG_MODE:
+        message += (
 
-        "\n\n✅ **Test Case Mapping Success**"
-    )
+            "\n\n✅ **Test Case Mapping Success**"
+        )
 
 
     # ----------------------------------------------
@@ -2030,6 +2083,17 @@ async def on_message(message):
     # ----------------------------------------------
     if session.get("awaiting_quit_confirmation"):
         await handle_quit_confirmation(message, session)
+        return
+
+    # ----------------------------------------------
+    # Revise Request (ขอย้อนกลับไปแก้ Algorithm)
+    # เช็คก่อน Help Triggers เสมอ และทำงานเฉพาะตอนอยู่ขั้นประเมินเท่านั้น
+    # ----------------------------------------------
+    if (
+        session.get("phase") == "EVALUATION_QP"
+        and detect_revise_trigger(message.content)
+    ):
+        await handle_revise_request(message, session)
         return
 
     # ----------------------------------------------
