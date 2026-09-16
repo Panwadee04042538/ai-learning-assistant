@@ -2,6 +2,8 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI
 
+from config import MAX_TOKENS_EXPLANATION, MAX_TOKENS_FEEDBACK
+
 
 # =========================================================
 # Load Environment
@@ -587,7 +589,7 @@ Rules:
 # Core Generate Function
 # =========================================================
 
-def _generate(instructions, prompt):
+def _generate(instructions, prompt, max_tokens=MAX_TOKENS_FEEDBACK):
 
     try:
 
@@ -603,7 +605,8 @@ def _generate(instructions, prompt):
                     "content": prompt
                 }
             ],
-            temperature=0.2
+            temperature=0.2,
+            max_tokens=max_tokens
         )
 
         if not response.choices:
@@ -699,11 +702,16 @@ def ask_ai(prompt):
     """
     ใช้ชื่อ ask_ai เพื่อให้ main.py
     สามารถเปลี่ยน Provider ได้ง่าย
+
+    ใช้ทั้งกับ feedback สั้น ๆ (QP feedback) และคำอธิบาย/โจทย์ที่ยาวกว่า
+    (โจทย์ฝึก, AI Knowledge Completion) จึงให้ max_tokens ระดับคำอธิบาย
+    เผื่อไว้ เพื่อไม่ให้ response ถูกตัดกลางประโยค
     """
 
     return _generate(
         GENERAL_INSTRUCTIONS,
-        prompt
+        prompt,
+        max_tokens=MAX_TOKENS_EXPLANATION
     )
 
 
@@ -732,7 +740,8 @@ Do not unnecessarily introduce unrelated concepts.
 
     return _generate(
         GROUNDED_ANSWER_INSTRUCTIONS,
-        prompt
+        prompt,
+        max_tokens=MAX_TOKENS_EXPLANATION
     )
 
 
@@ -744,7 +753,8 @@ def ask_reflection(prompt):
 
     return _generate(
         REFLECTION_INSTRUCTIONS,
-        prompt
+        prompt,
+        max_tokens=MAX_TOKENS_FEEDBACK
     )
 
 
@@ -756,7 +766,8 @@ def ask_evaluation(prompt):
 
     return _generate(
         EVALUATION_INSTRUCTIONS,
-        prompt
+        prompt,
+        max_tokens=MAX_TOKENS_FEEDBACK
     )
 
 
@@ -768,5 +779,6 @@ def ask_summary(prompt):
 
     return _generate(
         SUMMARY_INSTRUCTIONS,
-        prompt
+        prompt,
+        max_tokens=MAX_TOKENS_FEEDBACK
     )

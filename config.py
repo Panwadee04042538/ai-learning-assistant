@@ -25,3 +25,12 @@ QUESTION_BANK_PATH = os.path.join(
 # ==========================================
 
 DEBUG_MODE = False
+
+# ==========================================
+# Typhoon API — max_tokens ต่อประเภทคำตอบ
+#
+# ป้องกันไม่ให้ response ถูกตัดกลางประโยค (Finish reason: length)
+# ==========================================
+
+MAX_TOKENS_EXPLANATION = 2048  # คำอธิบายเนื้อหา เช่น Grounded Knowledge, โจทย์ฝึก, AI Completion
+MAX_TOKENS_FEEDBACK = 1024     # feedback/สรุปสั้น ๆ เช่น QP feedback, evaluation, reflection, summary
