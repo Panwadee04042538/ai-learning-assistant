@@ -115,6 +115,16 @@ class LearningFlowTest(unittest.TestCase):
             self.assertFalse(session.get("practice_mode", False))
 
     def test_full_practice_flow(self):
+        """
+        LG08 (โหมดฝึก) มี Planning 3 ข้อ (Q36-Q38), Monitoring 2 ข้อ,
+        Evaluation 2 ข้อ ตาม QP.xlsx เส้นทางที่ถูกต้องคือ:
+
+        Planning (ถามทีละข้อ 3 ข้อ) -> Monitoring (1 ข้อ, ถามครั้งเดียว)
+        -> ALGORITHM_ANSWER (PARTIAL + hint เป็น sub-turn, ไม่ถาม Monitoring
+        ซ้ำ) -> ALGORITHM_ANSWER (GOOD) -> Evaluation (1 ข้อ) -> จบ Session
+
+        รวมเป็น 3 "คำถามหลัก" ต่อ session: Planning / Monitoring / Evaluation
+        """
         evaluations = iter([
             {"success": True, "understanding_level": "PARTIAL",
              "feedback": "ยังขาดขั้นตอนแสดงผล", "strength": "มีการรับข้อมูล",
@@ -134,24 +144,63 @@ class LearningFlowTest(unittest.TestCase):
             s = self._session()
             self.assertIsNotNone(s)
             self.assertEqual(s["phase"], "PLANNING_QP")
+            self.assertEqual(s["question_id"], "PRACTICE")
             self.assertIsNotNone(s["session_id"], "โหมดฝึกต้องมี Learning Log")
-            self.assertIsNotNone(s["hint_question_id"])
+            self.assertIsNone(
+                s["hint_question_id"],
+                "ยังไม่ถึง Monitoring จึงยังไม่ควรมี hint_question_id",
+            )
+            self.assertEqual(len(s["planning_questions"]), 3)
+            self.assertEqual(s["planning_question_index"], 0)
+            self.assertEqual(s["main_question_count"], 1)
 
-            self._answer("ต้องรับคะแนนแล้วคำนวณเกรด")      # ตอบ Planning QP
+            # --------------------------------------------------
+            # Planning: ถามทีละข้อ รอคำตอบก่อนถามข้อถัดไป (3 ข้อ)
+            # --------------------------------------------------
+            self._answer("ต้องรับคะแนนแล้วคำนวณเกรด")      # ตอบ Planning ข้อ 1
+            s = self._session()
+            self.assertEqual(s["phase"], "PLANNING_QP", "ยังต้องถามข้อ 2 ต่อ")
+            self.assertEqual(s["planning_question_index"], 1)
+
+            self._answer("ใช้คะแนนสอบและคะแนนเก็บ")        # ตอบ Planning ข้อ 2
+            s = self._session()
+            self.assertEqual(s["phase"], "PLANNING_QP", "ยังต้องถามข้อ 3 ต่อ")
+            self.assertEqual(s["planning_question_index"], 2)
+
+            self._answer("คำนวณเกรดจากคะแนนรวม")           # ตอบ Planning ข้อ 3 (ข้อสุดท้าย)
+            s = self._session()
+            self.assertEqual(
+                s["phase"], "MONITORING_QP",
+                "ตอบครบทุกข้อ Planning แล้วต้องไป Monitoring",
+            )
+            self.assertEqual(s["hint_question_id"], "Q39")
+            self.assertEqual(s["main_question_count"], 2)
+
+            # --------------------------------------------------
+            # Monitoring: ถามครั้งเดียว แล้วค่อยให้ลงมือทำ Algorithm
+            # --------------------------------------------------
+            self._answer("ตรวจสอบทีละขั้นตอน")               # ตอบ Monitoring
             self.assertEqual(self._session()["phase"], "ALGORITHM_ANSWER")
 
+            # --------------------------------------------------
+            # ALGORITHM_ANSWER: PARTIAL -> hint เป็น sub-turn
+            # (ต้องไม่ถาม Monitoring ซ้ำ ไม่นับเป็นคำถามหลักเพิ่ม)
+            # --------------------------------------------------
             self._answer("1. เริ่ม 2. รับคะแนน 3. จบ")       # PARTIAL
             s = self._session()
-            self.assertEqual(s["phase"], "MONITORING_QP")
+            self.assertEqual(
+                s["phase"], "ALGORITHM_ANSWER",
+                "PARTIAL ต้องเป็น sub-turn ไม่ใช่คำถาม Monitoring ใหม่",
+            )
             self.assertEqual(s["hint_level"], 1)
-            self.assertTrue(s.get("pending_hint_text"))
-
-            self._answer("ขาดขั้นตอนแสดงผล")                 # ตอบ Monitoring QP
+            self.assertEqual(s["main_question_count"], 2, "hint ไม่นับเพิ่ม")
             joined = "\n".join(self.channel.sent)
             self.assertIn("คำใบ้", joined)
 
             self._answer("1. เริ่ม 2. รับคะแนน 3. คำนวณ 4. แสดงผล 5. จบ")  # GOOD
-            self.assertEqual(self._session()["phase"], "EVALUATION_QP")
+            s = self._session()
+            self.assertEqual(s["phase"], "EVALUATION_QP")
+            self.assertEqual(s["main_question_count"], 3)
 
             self._answer("แก้ปัญหาได้ เพราะทดสอบกับตัวอย่างแล้ว")  # ตอบ Evaluation QP
             self.assertIsNone(self._session(), "Session ต้องถูกปิดเมื่อจบ")
@@ -162,7 +211,10 @@ class LearningFlowTest(unittest.TestCase):
         log = logs[0]
         self.assertEqual(log["final_status"], "COMPLETED")
         phases = [r["phase"] for r in log.get("metacognitive_responses", [])]
-        self.assertEqual(phases, ["Planning", "Monitoring", "Evaluation"])
+        self.assertEqual(
+            phases,
+            ["Planning", "Planning", "Planning", "Monitoring", "Evaluation"],
+        )
         self.assertEqual(len(log.get("hints_used", [])), 1)
         self.assertEqual(len(log.get("student_responses", [])), 2)
 

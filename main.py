@@ -846,6 +846,52 @@ async def handle_qp_response(message, session):
     })
 
     if phase == "PLANNING_QP":
+        planning_questions = session.get("planning_questions", [])
+        next_index = session.get("planning_question_index", 0) + 1
+        session["planning_question_index"] = next_index
+
+        # ยังมีคำถาม Planning ข้อถัดไป -> ถามทีละข้อ รอคำตอบก่อนค่อยถามต่อ
+        if next_index < len(planning_questions):
+            next_qp = planning_questions[next_index]
+            session["active_qp"] = next_qp
+            await send_long_message(
+                message.channel,
+                "## 🧠 วางแผนก่อนลงมือ\n\n"
+                f"{qp_feedback}\n\n"
+                "### 📝 คำถามวางแผนข้อถัดไป\n\n"
+                f"{next_qp.get('system_question', '-')}"
+            )
+            return
+
+        # ตอบครบทุกข้อของ Planning แล้ว -> ไป Monitoring ก่อนลงมือ
+        # (ถ้า LG นี้มีขั้น Monitoring ตามดีไซน์)
+        lg_id = session.get("lg_id")
+        monitoring_qp = None
+
+        if _lg_has_phase_by_design(lg_id, "Monitoring"):
+            monitoring_qp = get_session_qp(
+                lg_id, "Monitoring",
+                exclude_question_ids=[
+                    q.get("question_id") for q in session.get("qp_responses", [])
+                ]
+            )
+
+        if monitoring_qp:
+            session["active_qp"] = monitoring_qp
+            session["phase"] = "MONITORING_QP"
+            session["hint_question_id"] = monitoring_qp.get("question_id")
+            session["main_question_count"] = (
+                session.get("main_question_count", 1) + 1
+            )
+            await send_long_message(
+                message.channel,
+                "## 🧠 วางแผนก่อนลงมือ\n\n"
+                f"{qp_feedback}\n\n"
+                "### 🔎 ก่อนลงมือ ลองตรวจสอบแนวคิดของตัวเองก่อน\n\n"
+                f"{monitoring_qp.get('system_question', '-')}"
+            )
+            return
+
         session["phase"] = "ALGORITHM_ANSWER"
         await send_long_message(message.channel,
             "## 🧠 วางแผนก่อนลงมือ\n\n"
@@ -857,11 +903,8 @@ async def handle_qp_response(message, session):
 
     if phase == "MONITORING_QP":
         session["phase"] = "ALGORITHM_ANSWER"
-        hint_text = session.pop("pending_hint_text", None)
-        text = "## 🔎 ลองตรวจสอบอีกครั้ง\n\n" + f"{qp_feedback}\n\n"
-        if hint_text:
-            text += "### 💡 คำใบ้\n\n" + f"{hint_text}\n\n"
-        text += "### ✏️ ลองปรับ Algorithm\n\n" + f"{session.get('algorithm_question', '-')}"
+        text = "## 🔎 ก่อนลงมือ\n\n" + f"{qp_feedback}\n\n"
+        text += "### ✏️ ลองทำโจทย์\n\n" + f"{session.get('algorithm_question', '-')}"
         await send_long_message(message.channel, text)
         return
 
@@ -1159,15 +1202,10 @@ async def start_algorithm_flow(ctx, question=None):
                 f"`{type(e).__name__}: {e}`"
             )
 
-        planning_qp = get_session_qp("LG08", "Planning")
+        # Planning ของ LG08 มีหลายข้อ -> เตรียมรายการไว้ถามทีละข้อ
+        planning_questions = get_qp_by_lg_phase("LG08", "Planning") or []
+        planning_qp = planning_questions[0] if planning_questions else None
 
-        # คำใบ้ของโหมดฝึกใช้ชุดคำใบ้ของคำถาม Monitoring ข้อแรกของ LG08
-        # (hint_bank.json ผูกคำใบ้ไว้กับ Question ID ไม่มีของ "PRACTICE")
-        first_monitoring_qp = get_session_qp("LG08", "Monitoring")
-        hint_question_id = (
-            first_monitoring_qp.get("question_id")
-            if first_monitoring_qp else None
-        )
         planning_text = (
             "\n\n### 🧠 วางแผนก่อนลงมือ\n\n"
             f"{planning_qp.get('system_question', '-')}\n\n"
@@ -1214,7 +1252,7 @@ async def start_algorithm_flow(ctx, question=None):
             "ku_id": None,
             "lg_id": "LG08",
             "question_id": "PRACTICE",
-            "hint_question_id": hint_question_id,
+            "hint_question_id": None,
             "attempt": 1,
             "max_attempts": MAX_ATTEMPTS,
             "hint_level": 0,
@@ -1222,6 +1260,9 @@ async def start_algorithm_flow(ctx, question=None):
             "qp_responses": [],
             "active_qp": planning_qp,
             "phase": "PLANNING_QP" if planning_qp else "ALGORITHM_ANSWER",
+            "planning_questions": planning_questions,
+            "planning_question_index": 0,
+            "main_question_count": 1,
             "reflection_shown": False,
             "expected_evidence": "",
             "session_id": (
@@ -1597,6 +1638,17 @@ Learning Goal:
     # ==========================================
     active_qp = learning_question
 
+    # Planning ของ LG นี้อาจมีหลายข้อ -> เตรียมรายการไว้ถามทีละข้อ
+    planning_questions = []
+    if session_phase == "Planning":
+        planning_questions = get_qp_by_lg_phase(goal_id, "Planning") or []
+
+    # ถ้า session เริ่มที่ Monitoring ทันที (เช่น LG05/LG07 ที่ไม่มี Planning)
+    # ให้ผูก hint_question_id กับคำถาม Monitoring ข้อนี้ไว้เลย
+    hint_question_id = (
+        active_qp.get("question_id") if session_phase == "Monitoring" else None
+    )
+
     # ==========================================
     # Save Pending Learning Session
     # ==========================================
@@ -1608,6 +1660,7 @@ Learning Goal:
         "lg_id": goal_id,
         "question_id": active_qp.get("question_id"),
         "qp_id": active_qp.get("qp_id"),
+        "hint_question_id": hint_question_id,
         "attempt": 1,
         "max_attempts": MAX_ATTEMPTS,
         "hint_level": 0,
@@ -1615,6 +1668,9 @@ Learning Goal:
         "qp_responses": [],
         "active_qp": active_qp,
         "phase": PHASE_TO_SESSION_KEY.get(session_phase, "EVALUATION_QP"),
+        "planning_questions": planning_questions,
+        "planning_question_index": 0,
+        "main_question_count": 1,
         "reflection_shown": False,
         "session_id": log_entry.get("session_id") if log_entry else None
     }
@@ -1696,10 +1752,22 @@ Learning Goal:
     # ----------------------------------------------
 
     if active_qp:
-        message += (
-            "\n\n### 🧠 คำถามช่วยคิด\n\n"
-            f"{active_qp.get('system_question', '-')}"
-        )
+
+        if session_phase == "Monitoring":
+            # LG นี้ไม่มีขั้น Planning (เช่น LG05/LG07) ผู้เรียนได้รับ
+            # Algorithm ที่เกี่ยวข้องมาให้ตรวจสอบโดยตรง ไม่ต้องวางแผนเอง
+            message += (
+                "\n\n### 🔍 ขั้นตรวจสอบ Algorithm\n\n"
+                "หัวข้อนี้ไม่มีขั้นวางแผน คุณจะได้ตรวจสอบ Algorithm "
+                "ที่เกี่ยวข้องกับคำถามของคุณโดยตรง กรุณาตอบคำถามต่อไปนี้"
+                "เพื่อเริ่มตรวจสอบ\n\n"
+                f"{active_qp.get('system_question', '-')}"
+            )
+        else:
+            message += (
+                "\n\n### 🧠 คำถามช่วยคิด\n\n"
+                f"{active_qp.get('system_question', '-')}"
+            )
 
     # ----------------------------------------------
     # Knowledge Source
@@ -2033,6 +2101,9 @@ async def on_message(message):
                 session["active_qp"] = evaluation_qp
                 session["phase"] = "EVALUATION_QP"
                 session["reflection_shown"] = False
+                session["main_question_count"] = (
+                    session.get("main_question_count", 1) + 1
+                )
                 await send_long_message(
                     message.channel,
                     "## 🪞 สะท้อนก่อนจบ\n\n"
@@ -2074,6 +2145,9 @@ async def on_message(message):
                 session["active_qp"] = evaluation_qp
                 session["phase"] = "EVALUATION_QP"
                 session["reflection_shown"] = False
+                session["main_question_count"] = (
+                    session.get("main_question_count", 1) + 1
+                )
                 await send_long_message(
                     message.channel,
                     "## 🪞 สะท้อนก่อนจบ\n\n"
@@ -2092,7 +2166,7 @@ async def on_message(message):
             return
 
         # ======================================
-        # PARTIAL → MONITORING QP → HINT
+        # PARTIAL → HINT (sub-turn ไม่นับเป็นคำถามหลัก)
         # ======================================
         if level == "PARTIAL":
             current_hint_level = session.get("hint_level", 0)
@@ -2116,24 +2190,6 @@ async def on_message(message):
                     attempt=attempt
                 )
 
-            monitoring_qp = get_session_qp(
-                session.get("lg_id"), "Monitoring",
-                exclude_question_ids=[
-                    q.get("question_id") for q in session.get("qp_responses", [])
-                ]
-            )
-            if monitoring_qp:
-                session["active_qp"] = monitoring_qp
-                session["phase"] = "MONITORING_QP"
-                session["pending_hint_text"] = hint_text
-                await send_long_message(message.channel, feedback_message)
-                await send_long_message(
-                    message.channel,
-                    "### 🔎 ลองตรวจสอบคำตอบของตัวเอง\n\n"
-                    f"{monitoring_qp.get('system_question', '-')}"
-                )
-                return
-
             if hint_text:
                 feedback_message += (
                     f"\n\n### 💡 คำใบ้ระดับที่ {next_hint_level}/3\n\n"
@@ -2146,27 +2202,9 @@ async def on_message(message):
                 )
 
         # ======================================
-        # NEEDS_IMPROVEMENT → EXPLAIN
+        # NEEDS_IMPROVEMENT → EXPLAIN (sub-turn ไม่นับเป็นคำถามหลัก)
         # ======================================
         elif level == "NEEDS_IMPROVEMENT":
-            monitoring_qp = get_session_qp(
-                session.get("lg_id"), "Monitoring",
-                exclude_question_ids=[
-                    q.get("question_id") for q in session.get("qp_responses", [])
-                ]
-            )
-            if monitoring_qp:
-                session["active_qp"] = monitoring_qp
-                session["phase"] = "MONITORING_QP"
-                session["pending_hint_text"] = None
-                await send_long_message(message.channel, feedback_message)
-                await send_long_message(
-                    message.channel,
-                    "### 🔎 ลองตรวจสอบความคิดของตัวเอง\n\n"
-                    f"{monitoring_qp.get('system_question', '-')}"
-                )
-                return
-
             feedback_message += (
                 "\n\n### 📖 ลองทบทวนเพิ่มเติม\n\n"
                 "คำตอบอาจยังไม่ตรงกับแนวคิดสำคัญของเรื่องนี้ "
