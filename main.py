@@ -31,10 +31,11 @@ from controllers.monitoring_controller import start_monitoring
 from controllers.evaluation_controller import start_evaluation
 from question_service import get_question_for_learning
 try:
-    from qp_service import select_qp, get_qp_by_lg_phase
+    from qp_service import select_qp, get_qp_by_lg_phase, get_qp_by_lg
 except ImportError:
     from qp_service import select_qp
     get_qp_by_lg_phase = None
+    get_qp_by_lg = None
 
 from retrieval_service import RetrievalService
 from learning_goal_service import LearningGoalService
@@ -697,6 +698,84 @@ def get_session_qp(lg_id, phase, exclude_question_ids=None):
 
     print(f"[QP NOT FOUND] LG={lg_id} Phase={phase}")
     return None
+
+
+# ==================================================
+# Initial Session Phase Selection
+# ==================================================
+
+SESSION_PHASE_FALLBACK_ORDER = ["Planning", "Monitoring", "Evaluation"]
+
+PHASE_TO_SESSION_KEY = {
+    "Planning": "PLANNING_QP",
+    "Monitoring": "MONITORING_QP",
+    "Evaluation": "EVALUATION_QP",
+}
+
+
+def _lg_has_phase_by_design(lg_id, phase):
+    """
+    ตรวจว่า LG นี้ถูกออกแบบให้มีขั้น phase นี้จริงหรือไม่
+    (ดูจากคำถามทั้งหมดของ LG ใน QP.xlsx ไม่สนใจ exclude_question_ids
+    เพราะต้องการรู้ "ดีไซน์" ไม่ใช่ "สิ่งที่เหลือให้เลือก")
+
+    บาง LG เช่น LG01 ถูกออกแบบให้มีเฉพาะขั้น Evaluation
+    ไม่ใช่ทุก LG ต้องมีครบ Planning -> Monitoring -> Evaluation
+    """
+
+    if get_qp_by_lg is None:
+        # ไม่มี qp_service รุ่นที่รองรับ ถือว่าไม่ทราบดีไซน์
+        # ปล่อยให้ caller ลองเรียก get_session_qp ตามปกติ
+        return True
+
+    try:
+        all_questions = get_qp_by_lg(lg_id) or []
+    except Exception as e:
+        print(f"[SESSION PHASE WARNING] get_qp_by_lg({lg_id}) error: {e}")
+        return True
+
+    target_phase = str(phase).strip().lower()
+
+    return any(
+        str(q.get("phase", "")).strip().lower() == target_phase
+        for q in all_questions
+    )
+
+
+def pick_initial_session_phase_and_qp(lg_id, exclude_question_ids=None):
+    """
+    เลือก Phase + QP เริ่มต้นของ session ใหม่ตามลำดับ
+    Planning -> Monitoring -> Evaluation
+
+    ข้าม Phase ที่ LG นี้ไม่ได้ถูกออกแบบให้มีไปเงียบ ๆ (ไม่ใช่ความผิดปกติ)
+    แต่ log warning ถ้า Phase ที่ควรมีตามดีไซน์กลับไม่พบคำถามจริง
+    (เช่นข้อมูลคำถามขาดหาย)
+
+    Returns
+    -------
+    (phase, qp) : (str หรือ None, dict หรือ None)
+    """
+
+    for phase in SESSION_PHASE_FALLBACK_ORDER:
+
+        if not _lg_has_phase_by_design(lg_id, phase):
+            continue
+
+        qp = get_session_qp(
+            lg_id,
+            phase,
+            exclude_question_ids=exclude_question_ids
+        )
+
+        if qp:
+            return phase, qp
+
+        print(
+            f"[SESSION PHASE WARNING] LG={lg_id} ควรมีขั้น {phase} "
+            "ตามการออกแบบ แต่ไม่พบคำถามจริง (ข้อมูลคำถามอาจขาดหาย)"
+        )
+
+    return None, None
 
 
 def build_qp_feedback_prompt(qp, student_answer, learning_goal, context=""):
@@ -1449,12 +1528,18 @@ Learning Goal:
     # ==========================================
     # Select QP from QP.xlsx
     # ==========================================
-    learning_question = get_session_qp(goal_id, "Evaluation")
+    # Session ใหม่ต้องเริ่มที่ Planning ก่อนเสมอถ้า LG นี้มีขั้น Planning
+    # ตามดีไซน์ ถ้าไม่มี (เช่น LG01 มีเฉพาะ Evaluation) ให้ fallback
+    # ไป Monitoring แล้วค่อย Evaluation ตามลำดับ
+    session_phase, learning_question = pick_initial_session_phase_and_qp(
+        goal_id
+    )
 
     if not learning_question:
         learning_question = get_question_for_learning(
             lg_id=goal_id, ku_id=ku_id, user_input=question
         )
+        session_phase = None
 
     # ==========================================
     # Validate Learning Question
@@ -1529,7 +1614,7 @@ Learning Goal:
         "attempt_history": [],
         "qp_responses": [],
         "active_qp": active_qp,
-        "phase": "EVALUATION_QP",
+        "phase": PHASE_TO_SESSION_KEY.get(session_phase, "EVALUATION_QP"),
         "reflection_shown": False,
         "session_id": log_entry.get("session_id") if log_entry else None
     }
