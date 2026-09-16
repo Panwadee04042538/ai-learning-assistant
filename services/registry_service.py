@@ -96,6 +96,16 @@ def is_registered(discord_user_id):
     return get_student_id(discord_user_id) is not None
 
 
+def get_all_students():
+    """
+    คืน mapping ทั้งหมด {discord_user_id: student_id} ที่ลงทะเบียนไว้
+
+    ใช้โดย teacher_dashboard.py เพื่อดูภาพรวมผู้เรียนที่ลงทะเบียนแล้ว
+    """
+
+    return dict(_load_registry())
+
+
 def register_student(discord_user_id, student_id):
     """
     ลงทะเบียน (หรือเปลี่ยนรหัสนักเรียนของ user เดิม)
