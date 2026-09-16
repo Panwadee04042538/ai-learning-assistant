@@ -883,16 +883,20 @@ Phase: {qp.get('phase', '-')}
 สิ่งที่คาดหวังให้ผู้เรียนตอบ: {qp.get('expect_input', '-')}
 บริบทเพิ่มเติม: {context or '-'}
 
-คำตอบของผู้เรียน:
+คำตอบของคุณ:
 {student_answer}
 
 หน้าที่:
-1. สะท้อนคำตอบของผู้เรียนอย่างสั้นและตรงประเด็น
-2. ชี้ให้เห็นจุดที่คิดหรือวางแผนได้ดี
-3. ถ้ามีจุดที่ควรตรวจสอบ ให้ชี้เป็นคำแนะนำสั้น ๆ โดยไม่เฉลยทั้งหมด
-4. ห้ามสร้างคำถาม Metacognition ใหม่
-5. ไม่ต้องให้คะแนนและไม่ต้องรายงาน progress
-6. ภาษาไทย เหมาะกับนักเรียนระดับอาชีวศึกษา
+1. สะท้อนคำตอบอย่างสั้นและตรงประเด็น โดยพูดกับผู้ตอบว่า "คุณ" ห้ามใช้คำว่า "นักเรียน"
+2. ชี้ให้เห็นเฉพาะจุดที่ปรากฏจริงในคำตอบว่าคิดหรือวางแผนได้ดี
+   ถ้าไม่มีจุดที่ทำได้ดีจริง ให้ข้ามส่วนนี้ไปเลย ห้ามชมลอย ๆ
+3. ห้ามชี้หรือเฉลยจุดที่ควรตรวจสอบโดยตรง ให้ถามคำถามชี้นำ 1 ข้อแทน
+   เพื่อให้กลับไปตรวจสอบจุดนั้นด้วยตนเอง
+4. ถ้าพบความเข้าใจผิด (เช่น สับสนระหว่าง loop กับ condition)
+   ให้ถามคำถามที่ชวนตรวจสอบจุดนั้นโดยเฉพาะ ห้ามแก้ให้ตรง ๆ
+5. ห้ามสร้างคำถาม Metacognition ใหม่ คำถามลักษณะนี้ต้องมาจาก QP.xlsx ที่ระบบเลือกให้เท่านั้น
+6. ไม่ต้องให้คะแนนและไม่ต้องรายงาน progress
+7. ภาษาไทย เหมาะกับนักเรียนระดับอาชีวศึกษา
 
 ตอบไม่เกิน 5 บรรทัด
 """
@@ -1017,6 +1021,126 @@ async def handle_qp_response(message, session):
             "🎉 จบรอบการเรียนรู้ครั้งนี้แล้ว")
         pending_learning_sessions.pop(message.author.id, None)
         return
+
+
+# ==================================================
+# LG01 Warmup / Wrapup (เปิดคาบ / ปิดคาบ)
+# ==================================================
+# LG01 มีเฉพาะขั้น Evaluation ตามดีไซน์ใน QP.xlsx จึงใช้เป็น
+# จุดเปิดคาบ (!warmup) และปิดคาบ (!wrapup) แทนกิจกรรมหลัก
+
+LG01_ALGORITHM_INTRO = (
+    "## 📖 ก่อนเริ่มคาบเรียน: Algorithm คืออะไร\n\n"
+    "Algorithm คือลำดับขั้นตอนที่ชัดเจนและมีลำดับก่อน-หลัง "
+    "สำหรับใช้แก้ปัญหาหนึ่ง ๆ ให้สำเร็จ\n\n"
+    "หลักการสำคัญของ Algorithm:\n"
+    "1. มีจุดเริ่มต้นและจุดสิ้นสุดที่ชัดเจน\n"
+    "2. แต่ละขั้นตอนต้องทำได้จริงและไม่กำกวม\n"
+    "3. ขั้นตอนเรียงลำดับกันจนนำไปสู่ผลลัพธ์ที่ต้องการ\n"
+    "4. อาจมีการเลือกเงื่อนไข (Selection) หรือการทำซ้ำ (Loop) "
+    "ได้ตามความเหมาะสมของปัญหา"
+)
+
+# user_id -> question_id ล่าสุดที่ใช้ใน !warmup
+# เก็บไว้เพื่อให้ !wrapup เลือกคำถามข้ออื่นแทนถ้าเป็นไปได้
+lg01_opening_history = {}
+
+
+def build_lg01_warmup_feedback_prompt(qp, student_answer):
+    return f"""
+คุณคือ AI Learning Assistant กำลังเปิดคาบเรียนด้วยคำถามเช็คความเข้าใจเรื่อง Algorithm
+
+คำถาม: {qp.get('system_question', '-')}
+คำตอบของคุณ: {student_answer}
+
+หน้าที่:
+1. สะท้อนคำตอบสั้น ๆ ไม่เกิน 2-3 ประโยค โดยพูดกับผู้ตอบว่า "คุณ" ห้ามใช้คำว่า "นักเรียน"
+2. ชมเฉพาะสิ่งที่ปรากฏจริงในคำตอบ ถ้าไม่มีจุดที่ทำได้ดีจริง ให้ข้ามไปเลย ห้ามชมลอย ๆ
+3. ถ้ามีจุดที่ควรตรวจสอบ ห้ามเฉลยตรง ๆ ให้ถามคำถามชี้นำ 1 ข้อแทน
+4. ห้ามสร้างคำถาม Metacognition ใหม่ คำถามลักษณะนี้ต้องมาจาก QP.xlsx ที่ระบบเลือกให้เท่านั้น
+5. ไม่ต้องให้คะแนน
+6. ภาษาไทย
+
+ตอบไม่เกิน 3 ประโยค
+"""
+
+
+def build_lg01_wrapup_summary_prompt(qp, student_answer):
+    return f"""
+คุณคือ AI Learning Assistant กำลังปิดคาบเรียนด้วยคำถามสะท้อนคิดเรื่อง Algorithm
+
+คำถาม: {qp.get('system_question', '-')}
+คำตอบของคุณ: {student_answer}
+
+หน้าที่:
+1. สรุปสั้น ๆ ไม่เกิน 2-3 ประโยคว่าคุณได้เรียนรู้อะไรจากคาบนี้ โดยอ้างอิงจากคำตอบจริงเท่านั้น
+   พูดกับผู้ตอบว่า "คุณ" ห้ามใช้คำว่า "นักเรียน"
+2. ชมเฉพาะสิ่งที่ปรากฏจริงในคำตอบ ถ้าไม่มีจุดที่ทำได้ดีจริง ให้ข้ามไปเลย ห้ามชมลอย ๆ
+3. ห้ามเฉลยหรือชี้ข้อผิดพลาดตรง ๆ ถ้ามีจุดที่ควรตรวจสอบให้ถามคำถามชี้นำ 1 ข้อแทน
+4. ห้ามสร้างคำถาม Metacognition ใหม่ คำถามลักษณะนี้ต้องมาจาก QP.xlsx ที่ระบบเลือกให้เท่านั้น
+5. ไม่ต้องให้คะแนน
+6. ภาษาไทย
+
+ตอบไม่เกิน 3 ประโยค
+"""
+
+
+async def handle_lg01_opening_response(message, session):
+    """ประมวลผลคำตอบ QP ของ !warmup / !wrapup (LG01)"""
+    mode = session.get("phase")
+    qp = session.get("active_qp") or {}
+    student_answer = message.content.strip()
+
+    processing = await message.channel.send("🧠 กำลังสะท้อนคำตอบของคุณ...")
+    try:
+        if mode == "LG01_WARMUP_QP":
+            prompt = build_lg01_warmup_feedback_prompt(qp, student_answer)
+        else:
+            prompt = build_lg01_wrapup_summary_prompt(qp, student_answer)
+        feedback = await asyncio.to_thread(ask_ai, prompt)
+    except Exception as e:
+        feedback = (
+            "ลองนึกดูอีกครั้งว่าเหตุผลของคำตอบเชื่อมกับหลักการ "
+            "ที่เพิ่งอธิบายไปอย่างไร"
+        )
+        print(f"⚠️ LG01 Opening Response Error: {type(e).__name__}: {e}")
+    finally:
+        try:
+            await processing.delete()
+        except Exception:
+            pass
+
+    session_id = session.get("session_id")
+
+    add_metacognitive_response(
+        session_id=session_id,
+        phase=qp.get("phase", "Evaluation"),
+        question_id=qp.get("question_id"),
+        qp_id=qp.get("qp_id"),
+        system_question=qp.get("system_question"),
+        student_answer=student_answer,
+        feedback=feedback
+    )
+
+    if session_id:
+        complete_learning_session(
+            session_id=session_id,
+            final_status="COMPLETED"
+        )
+
+    if mode == "LG01_WARMUP_QP":
+        heading = "## 📖 เริ่มคาบเรียน"
+        closing = "พร้อมแล้ว ไปลงมือกันเลย 🚀"
+    else:
+        heading = "## 🪞 สรุปการเรียนรู้วันนี้"
+        closing = "ขอบคุณที่ตั้งใจเรียนในคาบนี้ 🎉"
+
+    await send_long_message(
+        message.channel,
+        f"{heading}\n\n{feedback}\n\n{closing}"
+    )
+
+    pending_learning_sessions.pop(message.author.id, None)
 
 
 # ==================================================
@@ -1155,7 +1279,10 @@ def _current_question_text(session):
 
     phase = session.get("phase")
 
-    if phase in {"PLANNING_QP", "MONITORING_QP", "EVALUATION_QP"}:
+    if phase in {
+        "PLANNING_QP", "MONITORING_QP", "EVALUATION_QP",
+        "LG01_WARMUP_QP", "LG01_WRAPUP_QP"
+    }:
         active_qp = session.get("active_qp") or {}
         return active_qp.get("system_question", "-")
 
@@ -1551,10 +1678,12 @@ Learning Goal:
 1. อธิบายแนวคิดที่จำเป็นต่อการตอบคำถามอย่างเข้าใจง่าย
 2. เชื่อมโยงคำอธิบายกับ Learning Goal ที่กำหนด
 3. ช่วยผู้เรียนคิดเป็นขั้นตอนหรือใช้คำถามชี้นำ
-4. ถ้าเป็นคำถามเชิงปฏิบัติ ให้เสนอแนวทางเริ่มต้น ไม่เฉลยทั้งหมดทันที
+4. ถ้าเป็นคำถามเชิงปฏิบัติ ห้ามเฉลยขั้นตอนทั้งหมดหรือคำตอบที่ขาดโดยตรง
+   ให้ถามคำถามชี้นำ 1 ข้อ เพื่อให้ผู้เรียนคิดต่อเอง
 5. ห้ามอ้างว่าคำตอบมาจาก KU ใดโดยที่ระบบไม่ได้พบ KU นั้น
 6. หากข้อมูลในคำถามไม่เพียงพอ ให้บอกสิ่งที่ควรพิจารณาเพิ่มเติมอย่างชัดเจน
 7. ห้ามสร้างคำถาม Reflection เพิ่มเอง เพราะคำถาม Metacognition ต้องมาจาก QP.xlsx
+8. พูดกับผู้เรียนโดยตรงด้วยคำว่า "คุณ" ห้ามใช้คำว่า "นักเรียน"
 
 ตอบเป็นภาษาไทย เหมาะกับนักเรียนระดับอาชีวศึกษา
 """
@@ -2013,6 +2142,108 @@ async def problem(ctx, problem_id=None):
 
 
 # ==================================================
+# LG01 Warmup Command (เปิดคาบ)
+# ==================================================
+
+@bot.command()
+async def warmup(ctx):
+
+    if not is_registered(ctx.author.id):
+        await ctx.send(REGISTRATION_REQUIRED_MESSAGE)
+        return
+
+    qp = get_session_qp("LG01", "Evaluation")
+
+    if not qp:
+        await ctx.send("⚠️ ไม่พบคำถามเช็คความเข้าใจของ LG01 ใน QP.xlsx")
+        return
+
+    lg01_opening_history[ctx.author.id] = qp.get("question_id")
+
+    log_entry = add_learning_log(
+        user_id=ctx.author.id,
+        username=str(ctx.author),
+        user_question="!warmup",
+        ku_id=None,
+        ku_title=None,
+        lg_id="LG01",
+        lg_name="เปิดคาบเรียน (Warmup)",
+        qp_id=qp.get("qp_id"),
+        question_id=qp.get("question_id"),
+        system_question=qp.get("system_question"),
+        student_id=get_student_id(ctx.author.id)
+    )
+
+    pending_learning_sessions[ctx.author.id] = {
+        "learning_goal": "LG01 — เปิดคาบเรียน",
+        "lg_id": "LG01",
+        "phase": "LG01_WARMUP_QP",
+        "active_qp": qp,
+        "session_id": log_entry.get("session_id") if log_entry else None,
+        "qp_responses": [],
+    }
+
+    await send_long_message(
+        ctx,
+        f"{LG01_ALGORITHM_INTRO}\n\n"
+        "### 💭 ลองเช็คความเข้าใจของคุณ\n\n"
+        f"{qp.get('system_question', '-')}"
+    )
+
+
+# ==================================================
+# LG01 Wrapup Command (ปิดคาบ)
+# ==================================================
+
+@bot.command()
+async def wrapup(ctx):
+
+    if not is_registered(ctx.author.id):
+        await ctx.send(REGISTRATION_REQUIRED_MESSAGE)
+        return
+
+    used_question_id = lg01_opening_history.get(ctx.author.id)
+
+    qp = get_session_qp(
+        "LG01", "Evaluation",
+        exclude_question_ids=[used_question_id] if used_question_id else None
+    )
+
+    if not qp:
+        await ctx.send("⚠️ ไม่พบคำถามสะท้อนคิดของ LG01 ใน QP.xlsx")
+        return
+
+    log_entry = add_learning_log(
+        user_id=ctx.author.id,
+        username=str(ctx.author),
+        user_question="!wrapup",
+        ku_id=None,
+        ku_title=None,
+        lg_id="LG01",
+        lg_name="ปิดคาบเรียน (Wrapup)",
+        qp_id=qp.get("qp_id"),
+        question_id=qp.get("question_id"),
+        system_question=qp.get("system_question"),
+        student_id=get_student_id(ctx.author.id)
+    )
+
+    pending_learning_sessions[ctx.author.id] = {
+        "learning_goal": "LG01 — ปิดคาบเรียน",
+        "lg_id": "LG01",
+        "phase": "LG01_WRAPUP_QP",
+        "active_qp": qp,
+        "session_id": log_entry.get("session_id") if log_entry else None,
+        "qp_responses": [],
+    }
+
+    await send_long_message(
+        ctx,
+        "### 🪞 ก่อนจบคาบเรียนวันนี้\n\n"
+        f"{qp.get('system_question', '-')}"
+    )
+
+
+# ==================================================
 # Student Answer Listener
 # ==================================================
 
@@ -2103,6 +2334,13 @@ async def on_message(message):
 
     if help_category:
         await handle_help_trigger(message, session, help_category)
+        return
+
+    # ----------------------------------------------
+    # LG01 Warmup / Wrapup Response
+    # ----------------------------------------------
+    if session.get("phase") in {"LG01_WARMUP_QP", "LG01_WRAPUP_QP"}:
+        await handle_lg01_opening_response(message, session)
         return
 
     # ----------------------------------------------
