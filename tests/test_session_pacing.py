@@ -111,11 +111,14 @@ class BaseSessionTest(unittest.TestCase):
 
 
 class PlanningSingleQuestionTest(BaseSessionTest):
-    """งานที่ 1: ขั้น Planning มีคำถามเดียวต่อ session"""
+    """งานที่ 1: ขั้น Planning มีคำถามเดียวต่อ session แล้วไปเขียน Algorithm
+    ทันที (Monitoring ย้ายไปถามหลังประเมิน Algorithm แล้วแทน ไม่ใช่ก่อน
+    ส่ง Algorithm เหมือนเดิม)"""
 
-    def test_lg02_planning_asks_one_question_then_moves_to_monitoring(self):
+    def test_lg02_planning_asks_one_question_then_goes_straight_to_algorithm(self):
         # LG02 มีคำถาม Planning หลายข้อใน QP.xlsx (Q04, Q05, Q06) แต่ session
-        # ต้องถามแค่ข้อแรกแล้วไป Monitoring ทันที ไม่ถามต่อทีละข้อ
+        # ต้องถามแค่ข้อแรกแล้วไปเขียน Algorithm ทันที ไม่ถามต่อทีละข้อ
+        # และไม่แวะ Monitoring ก่อนด้วย
         with patch.object(main, "ask_grounded_answer", lambda q, c: "mock"), \
              patch.object(main, "ask_ai", lambda p: "mock feedback"):
 
@@ -134,28 +137,58 @@ class PlanningSingleQuestionTest(BaseSessionTest):
             planning_question_id = s["active_qp"]["question_id"]
             self.assertTrue(planning_question_id)
 
-            # ตอบคำถาม Planning ข้อเดียว -> ต้องไป Monitoring ทันที
-            # (LG02 มีขั้น Monitoring ตามดีไซน์)
+            # ตอบคำถาม Planning ข้อเดียว -> ต้องไปเขียน Algorithm ทันที
+            # ไม่ใช่ไป Monitoring ก่อน
             self._answer("โจทย์ต้องการคำนวณเกรด")
             s = self._session()
             self.assertEqual(
-                s["phase"], "MONITORING_QP",
-                "Planning มีข้อเดียว ตอบแล้วต้องไป Monitoring ทันที ไม่ถามข้อถัดไป",
+                s["phase"], "ALGORITHM_ANSWER",
+                "หลังตอบ Planning ต้องไปเขียน Algorithm ทันที ไม่ใช่ไป Monitoring ก่อน",
+            )
+            # Algorithm ยังไม่ถูกประเมิน จึงยังไม่นับเป็นคำถามหลักข้อใหม่
+            self.assertEqual(s["main_question_count"], 1)
+
+            metacog_phases = [r["phase"] for r in s["qp_responses"]]
+            self.assertEqual(metacog_phases, ["PLANNING_QP"])
+
+            # feedback กับ "ลองทำโจทย์" ต้องแยกคนละข้อความ ไม่รวมกัน
+            feedback_msg = self.channel.sent[-2]
+            algorithm_prompt_msg = self.channel.sent[-1]
+            self.assertIn("mock feedback", feedback_msg)
+            self.assertNotIn("ลองทำโจทย์", feedback_msg)
+            self.assertIn("ลองทำโจทย์", algorithm_prompt_msg)
+
+            # ส่ง Algorithm แล้วได้ GOOD -> ต้องไป Monitoring ก่อน (ยังไม่เคย
+            # ถาม Monitoring ใน session นี้) ไม่ใช่ไป Evaluation ตรง ๆ
+            good_result = {
+                "success": True, "understanding_level": "GOOD",
+                "feedback": "ครบถ้วน", "strength": "ลำดับชัดเจน",
+                "improvement": "-", "next_action": "COMPLETE",
+                "response_type": "ALGORITHM_ANSWER",
+            }
+            with patch.object(main, "evaluate_student_response",
+                               lambda *a, **k: good_result):
+                self._answer("1. รับคะแนน 2. คำนวณเกรด 3. แสดงผล")
+
+            s = self._session()
+            self.assertEqual(
+                s["phase"], "MONITORING_QP_POST_ALGORITHM",
+                "GOOD ครั้งแรกต้องไปตรวจสอบ Algorithm (Monitoring) ก่อน Evaluation",
             )
             self.assertEqual(s["main_question_count"], 2)
 
-            metacog_phases = [
-                r["phase"] for r in s["qp_responses"]
-            ]
-            self.assertEqual(metacog_phases, ["PLANNING_QP"])
+            # ตอบ Monitoring แล้วต้องไป Evaluation ต่อ ไม่ใช่กลับไปเขียน
+            # Algorithm ซ้ำ
+            self._answer("ตรวจสอบแล้วครบทุกขั้นตอน")
+            s = self._session()
+            self.assertEqual(s["phase"], "EVALUATION_QP")
+            self.assertEqual(s["main_question_count"], 3)
 
-            # feedback กับคำถาม Monitoring ต้องแยกคนละข้อความ ไม่รวมกัน
-            feedback_msg = self.channel.sent[-2]
-            question_msg = self.channel.sent[-1]
-            self.assertIn("mock feedback", feedback_msg)
-            self.assertNotIn("🔎", feedback_msg)
-            self.assertIn("🔎", question_msg)
-            self.assertNotIn("mock feedback", question_msg)
+            metacog_phases = [r["phase"] for r in s["qp_responses"]]
+            self.assertEqual(
+                metacog_phases,
+                ["PLANNING_QP", "MONITORING_QP_POST_ALGORITHM"],
+            )
 
 
 class NoPlanningStartsAtMonitoringTest(BaseSessionTest):
