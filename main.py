@@ -874,8 +874,10 @@ def pick_initial_session_phase_and_qp(lg_id, exclude_question_ids=None):
 
 def _get_next_qp_after_algorithm(session):
     """
-    เลือก QP ขั้นถัดไปหลังประเมิน Algorithm แล้วได้ GOOD หรือ
-    MAX_ATTEMPTS_REACHED
+    เลือก QP ขั้นถัดไปหลังประเมิน Algorithm แล้วได้ MAX_ATTEMPTS_REACHED
+
+    (ใช้เฉพาะกรณี MAX_ATTEMPTS_REACHED เท่านั้น — กรณี GOOD ข้าม Monitoring
+    ไปหา Evaluation ตรง ๆ เสมอ ไม่ผ่านฟังก์ชันนี้)
 
     ลำดับ: Monitoring ก่อนเสมอ (ถ้า LG นี้มีขั้น Monitoring ตามดีไซน์
     และ session นี้ยังไม่เคยถาม Monitoring มาก่อน) แล้วค่อย Evaluation
@@ -1001,14 +1003,47 @@ async def handle_qp_response(message, session):
             f"{qp_feedback}"
         )
 
-        # ไปลงมือเขียน Algorithm ทันที Monitoring ถูกย้ายไปถามหลังประเมิน
-        # Algorithm แล้วแทน (ดู MONITORING_QP_POST_ALGORITHM ด้านล่าง)
+        lg_id = session.get("lg_id")
+
+        # เฉพาะ LG08 (โหมดฝึกออกแบบ Algorithm จากสถานการณ์) เท่านั้นที่ให้
+        # เขียน/ส่ง Algorithm ต่อ LG อื่นหลัง Planning ให้ไป Evaluation เลย
+        if lg_id != "LG08":
+            evaluation_qp = get_session_qp(
+                lg_id, "Evaluation",
+                exclude_question_ids=[
+                    q.get("question_id") for q in session.get("qp_responses", [])
+                ]
+            )
+
+            if evaluation_qp:
+                session["active_qp"] = evaluation_qp
+                session["phase"] = "EVALUATION_QP"
+                session["main_question_count"] = (
+                    session.get("main_question_count", 1) + 1
+                )
+                await send_long_message(
+                    message.channel,
+                    "### 🪞 สะท้อนก่อนจบ\n\n"
+                    f"{evaluation_qp.get('system_question', '-')}"
+                )
+                return
+
+            # ไม่พบคำถาม Evaluation (ผิดปกติ เพราะทุก LG ควรมี Evaluation)
+            session_id = session.get("session_id")
+            if session_id:
+                complete_learning_session(
+                    session_id=session_id, final_status="COMPLETED"
+                )
+            pending_learning_sessions.pop(message.author.id, None)
+            return
+
+        # LG08: ไปลงมือเขียน Algorithm ทันที Monitoring ถูกย้ายไปถามหลัง
+        # ประเมิน Algorithm แล้วแทน (ดู MONITORING_QP_POST_ALGORITHM ด้านล่าง)
         # ไม่ใช่ก่อนส่ง Algorithm เหมือนเดิมอีกต่อไป
 
         # แอบดูว่า Monitoring ข้อไหนจะถูกถามทีหลัง เพื่อผูก hint_question_id
         # ไว้ล่วงหน้า (คำใบ้ระหว่างเขียน Algorithm อ้างอิงคำถาม Monitoring
         # ของ LG นี้เหมือนเดิม แม้จะยังไม่ถามจริงตอนนี้ก็ตาม)
-        lg_id = session.get("lg_id")
         if _lg_has_phase_by_design(lg_id, "Monitoring"):
             upcoming_monitoring_qp = get_session_qp(
                 lg_id, "Monitoring",
@@ -1547,6 +1582,13 @@ async def start_algorithm_flow(ctx, question=None):
         await ctx.send(REGISTRATION_REQUIRED_MESSAGE)
         return
 
+    if ctx.author.id in pending_learning_sessions:
+        await ctx.send(
+            "⚠️ มี session ค้างอยู่ ส่ง Algorithm มาได้เลย "
+            "หรือพิมพ์ `!cancel` เพื่อเริ่มใหม่"
+        )
+        return
+
     if is_practice_request(question):
 
         practice_prompt = f"""
@@ -1696,21 +1738,6 @@ async def start_algorithm_flow(ctx, question=None):
 
     question = question.strip()
 
-    # ----------------------------------------------
-    # Reset Previous Learning Session
-    # ----------------------------------------------
-    user_id = ctx.author.id
-
-    if user_id in pending_learning_sessions:
-        old_session = pending_learning_sessions.pop(user_id)
-
-        print(
-            f"[SESSION RESET] "
-            f"user={user_id} "
-            f"old_session={old_session.get('session_id')} "
-            f"old_lg={old_session.get('lg_id')} "
-            f"new_question={question}"
-        )
     # ----------------------------------------------
     # Data-driven Detection
     # ----------------------------------------------
@@ -2214,6 +2241,38 @@ async def alg(ctx, *, question=None):
 
 
 # ==================================================
+# Cancel Command
+# ==================================================
+
+@bot.command()
+async def cancel(ctx):
+
+    if not is_registered(ctx.author.id):
+        await ctx.send(REGISTRATION_REQUIRED_MESSAGE)
+        return
+
+    user_id = ctx.author.id
+    session = pending_learning_sessions.get(user_id)
+
+    if not session:
+        await ctx.send("ไม่มี session ค้างอยู่ตอนนี้")
+        return
+
+    session_id = session.get("session_id")
+
+    if session_id:
+        complete_learning_session(
+            session_id=session_id,
+            final_status="CANCELLED",
+            final_understanding_level=session.get("last_understanding_level")
+        )
+
+    pending_learning_sessions.pop(user_id, None)
+
+    await ctx.send("❌ ยกเลิก session เดิมแล้ว พิมพ์ `!alg` เพื่อเริ่มใหม่ได้เลย")
+
+
+# ==================================================
 # Problem Bank Command
 # ==================================================
 
@@ -2677,29 +2736,29 @@ async def on_message(message):
         if level == "GOOD":
             await send_long_message(message.channel, feedback_message)
 
-            next_phase, next_qp = _get_next_qp_after_algorithm(session)
+            # GOOD ข้าม Monitoring ไปหา Evaluation เลย (ต่างจาก
+            # MAX_ATTEMPTS_REACHED ที่ยังแวะ Monitoring ก่อน)
+            evaluation_qp = get_session_qp(
+                session.get("lg_id"), "Evaluation",
+                exclude_question_ids=[
+                    q.get("question_id") for q in session.get("qp_responses", [])
+                ]
+            )
 
-            if next_qp and not session.get("reflection_shown"):
+            if evaluation_qp and not session.get("reflection_shown"):
                 session["last_understanding_level"] = "GOOD"
                 session["pending_final_status"] = "COMPLETED"
-                session["active_qp"] = next_qp
-                session["phase"] = next_phase
+                session["active_qp"] = evaluation_qp
+                session["phase"] = "EVALUATION_QP"
                 session["reflection_shown"] = False
                 session["main_question_count"] = (
                     session.get("main_question_count", 1) + 1
                 )
-                if next_phase == "MONITORING_QP_POST_ALGORITHM":
-                    await send_long_message(
-                        message.channel,
-                        "## 🔍 ลองตรวจสอบ Algorithm ที่เขียน\n\n"
-                        f"{next_qp.get('system_question', '-')}"
-                    )
-                else:
-                    await send_long_message(
-                        message.channel,
-                        "## 🪞 สะท้อนก่อนจบ\n\n"
-                        f"{next_qp.get('system_question', '-')}"
-                    )
+                await send_long_message(
+                    message.channel,
+                    "## 🪞 สะท้อนก่อนจบ\n\n"
+                    f"{evaluation_qp.get('system_question', '-')}"
+                )
                 return
 
             if session_id:

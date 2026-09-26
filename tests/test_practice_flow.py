@@ -135,12 +135,11 @@ class LearningFlowTest(unittest.TestCase):
         Monitoring 1 ข้อ, Evaluation 1 ข้อ ตาม QP.xlsx เส้นทางที่ถูกต้องคือ:
 
         Planning (1 ข้อ) -> ALGORITHM_ANSWER (PARTIAL + hint เป็น sub-turn)
-        -> ALGORITHM_ANSWER (GOOD) -> Monitoring (1 ข้อ, หลังเห็น Algorithm
-        แล้ว) -> Evaluation (1 ข้อ) -> จบ Session
+        -> ALGORITHM_ANSWER (GOOD) -> Evaluation (1 ข้อ) -> จบ Session
 
-        Monitoring ต้องถามหลังประเมิน Algorithm แล้วเท่านั้น (ไม่ใช่ก่อนส่ง
-        Algorithm เหมือนเดิม) รวมเป็น 3 "คำถามหลัก" ต่อ session:
-        Planning / Monitoring / Evaluation แต่ละ transition ต้องส่ง
+        GOOD ข้าม Monitoring ไปหา Evaluation เลย (ต่างจาก
+        MAX_ATTEMPTS_REACHED ที่ยังแวะ Monitoring ก่อน ดู
+        tests/test_monitoring_after_algorithm.py) แต่ละ transition ต้องส่ง
         feedback กับคำถาม/ขั้นตอนถัดไปแยกคนละข้อความ ไม่ใช่รวมกันในข้อความ
         เดียว
         """
@@ -218,32 +217,22 @@ class LearningFlowTest(unittest.TestCase):
             self.assertIn("คำใบ้", joined)
 
             # --------------------------------------------------
-            # ALGORITHM_ANSWER -> GOOD: ต้องไป Monitoring ก่อน Evaluation
-            # (Monitoring ย้ายมาอยู่หลังเห็น Algorithm จริงแล้ว)
+            # ALGORITHM_ANSWER -> GOOD: ข้าม Monitoring ไปหา Evaluation เลย
+            # (ต่างจาก MAX_ATTEMPTS_REACHED ที่ยังแวะ Monitoring ก่อน)
             # --------------------------------------------------
             self._answer("1. เริ่ม 2. รับคะแนน 3. คำนวณ 4. แสดงผล 5. จบ")  # GOOD
             s = self._session()
             self.assertEqual(
-                s["phase"], "MONITORING_QP_POST_ALGORITHM",
-                "GOOD ต้องไปตรวจสอบ Algorithm (Monitoring) ก่อน ไม่ใช่ไป "
-                "Evaluation ตรง ๆ",
+                s["phase"], "EVALUATION_QP",
+                "GOOD ต้องข้าม Monitoring ไปหา Evaluation เลย",
             )
             self.assertEqual(s["main_question_count"], 2)
 
-            # feedback ของผลประเมิน GOOD กับคำถาม Monitoring ต้องแยกคนละข้อความ
+            # feedback ของผลประเมิน GOOD กับคำถาม Evaluation ต้องแยกคนละข้อความ
             good_feedback_msg = self.channel.sent[-2]
-            monitoring_question_msg = self.channel.sent[-1]
+            evaluation_question_msg = self.channel.sent[-1]
             self.assertIn("ผลการวิเคราะห์คำตอบ", good_feedback_msg)
-            self.assertIn("🔍", monitoring_question_msg)
-
-            # --------------------------------------------------
-            # Monitoring (หลัง Algorithm): ตอบแล้วต้องไป Evaluation ต่อ
-            # ไม่ใช่กลับไปเขียน Algorithm ซ้ำ
-            # --------------------------------------------------
-            self._answer("ตรวจสอบแล้วครบทุกขั้นตอน")        # ตอบ Monitoring
-            s = self._session()
-            self.assertEqual(s["phase"], "EVALUATION_QP")
-            self.assertEqual(s["main_question_count"], 3)
+            self.assertIn("🪞", evaluation_question_msg)
 
             self._answer("แก้ปัญหาได้ เพราะทดสอบกับตัวอย่างแล้ว")  # ตอบ Evaluation QP
             self.assertIsNone(self._session(), "Session ต้องถูกปิดเมื่อจบ")
@@ -256,7 +245,8 @@ class LearningFlowTest(unittest.TestCase):
         phases = [r["phase"] for r in log.get("metacognitive_responses", [])]
         self.assertEqual(
             phases,
-            ["Planning", "Monitoring", "Evaluation"],
+            ["Planning", "Evaluation"],
+            "GOOD ข้าม Monitoring ไปเลย จึงเหลือแค่ Planning กับ Evaluation",
         )
         self.assertEqual(len(log.get("hints_used", [])), 1)
         self.assertEqual(len(log.get("student_responses", [])), 2)
