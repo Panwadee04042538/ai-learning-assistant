@@ -1,11 +1,13 @@
 """
-ทดสอบการข้าม Grounded Answer ใน !alg เมื่อผู้เรียนส่งโจทย์มาวิเคราะห์
+ทดสอบการข้าม Grounded Answer ใน !learn เมื่อผู้เรียนส่งโจทย์มาวิเคราะห์
 (ไม่ใช่คำถามความรู้ทั่วไป)
 
-เดิม: !alg → detect LG → grounded answer (เฉลยเนื้อหา) → QP
-ใหม่: !alg → detect LG → QP เลย (ข้าม grounded answer)
-      ยกเว้นคำถามความรู้ทั่วไป เช่น "loop คืออะไร", "if else ใช้ยังไง"
-      ที่ยังเรียก Grounded Answer ได้ตามปกติ
+หมายเหตุ: ตรรกะนี้เดิมอยู่ใน !alg แต่ย้ายไป !learn ทั้งหมดแล้ว เพราะ !alg
+ตอนนี้ทำงานเฉพาะกับโจทย์ที่เลือกไว้ผ่าน !problem เท่านั้น ไม่รับคำถามอิสระ
+
+!learn → detect LG → QP เลย (ข้าม grounded answer)
+         ยกเว้นคำถามความรู้ทั่วไป เช่น "loop คืออะไร", "if else ใช้ยังไง"
+         ที่ยังเรียก Grounded Answer ได้ตามปกติ
 
 วิธีรัน (จากโฟลเดอร์หลักของโปรเจกต์):
     python -m unittest tests.test_grounded_answer_gating -v
@@ -98,7 +100,7 @@ class IsGeneralKnowledgeQuestionTest(unittest.TestCase):
 
 
 class AlgGroundedAnswerGatingTest(unittest.TestCase):
-    """ทดสอบผลจริงเมื่อ !alg ผ่าน start_algorithm_flow()"""
+    """ทดสอบผลจริงเมื่อ !learn ผ่าน start_learn_flow()"""
 
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
@@ -129,7 +131,7 @@ class AlgGroundedAnswerGatingTest(unittest.TestCase):
     def _ask(self, question):
         mock_grounded = MagicMock(return_value="คำอธิบายจำลอง")
         with patch.object(main, "ask_grounded_answer", mock_grounded):
-            asyncio.run(main.start_algorithm_flow(self.ctx, question))
+            asyncio.run(main.start_learn_flow(self.ctx, question))
         return mock_grounded
 
     def test_general_knowledge_question_still_calls_grounded_answer(self):

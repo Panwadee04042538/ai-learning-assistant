@@ -1,7 +1,7 @@
 """
 ทดสอบโหมด DEBUG (config.DEBUG_MODE):
 
-ข้อความที่ส่งไป Discord จากคำสั่ง !alg / start_algorithm_flow ต้องไม่มี
+ข้อความที่ส่งไป Discord จากคำสั่ง !learn / start_learn_flow ต้องไม่มี
 ข้อมูล debug (Matched Term, Match Type, Score, ✅ Test Case Mapping
 Success) เมื่อ DEBUG_MODE = False และต้องมีข้อมูลเหล่านี้เมื่อ
 DEBUG_MODE = True
@@ -108,7 +108,7 @@ class DebugModeMessageTest(unittest.TestCase):
         with patch.object(
             main, "ask_grounded_answer", lambda q, c: "คำอธิบายจำลอง"
         ):
-            asyncio.run(main.start_algorithm_flow(self.ctx, question))
+            asyncio.run(main.start_learn_flow(self.ctx, question))
 
     def test_debug_markers_hidden_when_debug_mode_off(self):
         with patch.object(main, "DEBUG_MODE", False):

@@ -1,6 +1,6 @@
 """
-ทดสอบว่า session ใหม่ที่เกิดจากคำสั่ง !alg (ไม่ใช่ practice mode)
-เริ่มต้นที่ Phase ที่ถูกต้องตามดีไซน์ของ LG นั้น ๆ
+ทดสอบว่า session ใหม่ที่เกิดจากคำสั่ง !alg (ทำโจทย์จาก Problem Bank)
+เริ่มต้นที่ Phase ที่ถูกต้องตามดีไซน์ของ LG ที่แท็กไว้กับโจทย์นั้น ๆ
 
 บั๊กเดิม: start_algorithm_flow() hardcode ให้ session ใหม่ทุกตัว
 เริ่มที่ Phase=Evaluation เสมอ ไม่ว่า LG นั้นจะถูกออกแบบให้มี
@@ -134,6 +134,7 @@ class StartAlgorithmFlowPhaseTest(unittest.TestCase):
         self.registry_patch.start()
 
         main.pending_learning_sessions.clear()
+        main.active_problem_context.clear()
         self.channel = FakeChannel()
         self.author = FakeAuthor()
         self.ctx = FakeCtx(self.channel, self.author)
@@ -147,16 +148,17 @@ class StartAlgorithmFlowPhaseTest(unittest.TestCase):
     def _session(self):
         return main.pending_learning_sessions.get(self.author.id)
 
-    def test_new_non_practice_session_starts_at_planning_for_lg02(self):
+    def test_new_session_starts_at_planning_for_lg02_tagged_problem(self):
         """
-        คำถามที่ตรงกับ LG02 (ซึ่งมีขั้น Planning ตามดีไซน์) ต้องสร้าง
+        โจทย์ที่แท็ก LG02 (ซึ่งมีขั้น Planning ตามดีไซน์) ต้องสร้าง
         session ใหม่ที่ phase == PLANNING_QP ไม่ใช่ EVALUATION_QP
         (นี่คือ regression test ของบั๊กที่ session ใหม่เริ่มผิด Phase)
         """
-        with patch.object(main, "ask_grounded_answer", lambda q, c: "คำอธิบายจำลอง"):
-            asyncio.run(
-                main.start_algorithm_flow(self.ctx, "วิเคราะห์โจทย์ยังไง")
-            )
+        main.active_problem_context[self.author.id] = {
+            "id": "P-LG02", "lg": ["LG02"], "situation": "สถานการณ์ทดสอบ",
+        }
+
+        asyncio.run(main.start_algorithm_flow(self.ctx, None))
 
         session = self._session()
         self.assertIsNotNone(session, "ควรมี session ใหม่ถูกสร้างขึ้น")
@@ -167,15 +169,16 @@ class StartAlgorithmFlowPhaseTest(unittest.TestCase):
             "Session ใหม่ของ LG ที่มีขั้น Planning ต้องเริ่มที่ PLANNING_QP",
         )
 
-    def test_new_non_practice_session_for_lg_without_planning(self):
+    def test_new_session_for_lg_without_planning(self):
         """
-        คำถามที่ตรงกับ LG01 (มีเฉพาะขั้น Evaluation ตามดีไซน์) ควรเริ่มที่
+        โจทย์ที่แท็ก LG01 (มีเฉพาะขั้น Evaluation ตามดีไซน์) ควรเริ่มที่
         EVALUATION_QP ได้ตามปกติ เพราะไม่มี Planning/Monitoring ให้เริ่ม
         """
-        with patch.object(main, "ask_grounded_answer", lambda q, c: "คำอธิบายจำลอง"):
-            asyncio.run(
-                main.start_algorithm_flow(self.ctx, "Algorithm คืออะไร")
-            )
+        main.active_problem_context[self.author.id] = {
+            "id": "P-LG01", "lg": ["LG01"], "situation": "สถานการณ์ทดสอบ",
+        }
+
+        asyncio.run(main.start_algorithm_flow(self.ctx, None))
 
         session = self._session()
         self.assertIsNotNone(session)

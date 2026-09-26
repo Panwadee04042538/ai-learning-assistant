@@ -83,6 +83,7 @@ class PendingSessionAndCancelTest(unittest.TestCase):
         self.registry_patch.start()
 
         main.pending_learning_sessions.clear()
+        main.active_problem_context.clear()
 
         self.channel = FakeChannel()
         self.author = FakeAuthor()
@@ -157,14 +158,28 @@ class PendingSessionAndCancelTest(unittest.TestCase):
         )
 
     def test_alg_without_pending_session_still_works_normally(self):
-        with patch.object(main, "ask_grounded_answer", lambda q, c: "mock"):
-            asyncio.run(
-                main.start_algorithm_flow(self.ctx, "Algorithm คืออะไร")
-            )
+        main.active_problem_context[self.author.id] = {
+            "id": "P01", "lg": ["LG02"], "situation": "สถานการณ์ทดสอบ",
+        }
+
+        asyncio.run(main.start_algorithm_flow(self.ctx, None))
 
         self.assertIsNotNone(main.pending_learning_sessions.get(self.author.id))
         joined = "\n".join(self.channel.sent)
         self.assertNotIn("มี session ค้างอยู่", joined)
+
+    # --------------------------------------------------
+    # !alg โดยไม่มีโจทย์ที่เลือกไว้ผ่าน !problem
+    # --------------------------------------------------
+
+    def test_alg_without_active_problem_asks_to_use_problem_or_learn(self):
+        asyncio.run(main.start_algorithm_flow(self.ctx, None))
+
+        self.assertIsNone(main.pending_learning_sessions.get(self.author.id))
+        sent_message = self.channel.sent[-1]
+        self.assertIn("!problem", sent_message)
+        self.assertIn("P07", sent_message)
+        self.assertIn("!learn", sent_message)
 
     # --------------------------------------------------
     # !cancel
@@ -198,10 +213,10 @@ class PendingSessionAndCancelTest(unittest.TestCase):
         self._existing_session()
         asyncio.run(main.cancel.callback(self.ctx))
 
-        with patch.object(main, "ask_grounded_answer", lambda q, c: "mock"):
-            asyncio.run(
-                main.start_algorithm_flow(self.ctx, "Algorithm คืออะไร")
-            )
+        main.active_problem_context[self.author.id] = {
+            "id": "P01", "lg": ["LG02"], "situation": "สถานการณ์ทดสอบ",
+        }
+        asyncio.run(main.start_algorithm_flow(self.ctx, None))
 
         session = main.pending_learning_sessions.get(self.author.id)
         self.assertIsNotNone(session)

@@ -4,10 +4,12 @@
 วิธีรัน (จากโฟลเดอร์หลักของโปรเจกต์):
     python -m unittest tests.test_practice_flow -v
 
-ลำดับที่ทดสอบ (โหมดขอโจทย์ฝึก LG08):
-    ขอโจทย์ → Planning QP (1 ข้อ) → ส่ง Algorithm (PARTIAL)
-    → Monitoring QP (1 ข้อ) + คำใบ้ → ส่ง Algorithm (GOOD)
-    → Evaluation QP → จบ Session และบันทึก Log ครบ
+ลำดับที่ทดสอบ (!problem แล้วตามด้วย !alg ทำโจทย์จาก Problem Bank):
+    !problem P.. -> !alg -> Planning QP (1 ข้อ) -> ส่ง Algorithm (PARTIAL)
+    -> ส่ง Algorithm (GOOD) -> Evaluation QP -> จบ Session และบันทึก Log ครบ
+
+หมายเหตุ: โหมด "ขอโจทย์ฝึก" แบบให้ AI แต่งโจทย์ LG08 สด ๆ (is_practice_request)
+ถูกตัดออกแล้ว แทนที่ด้วย flow !problem -> !alg นี้
 """
 
 import asyncio
@@ -29,7 +31,27 @@ os.environ.setdefault("DISCORD_TOKEN", "test")
 
 import logger  # noqa: E402
 import main    # noqa: E402
+import services.problem_service as problem_service  # noqa: E402
 import services.registry_service as registry_service  # noqa: E402
+
+
+SAMPLE_PROBLEMS = [
+    {
+        "id": "P-LG08",
+        "round": 1,
+        "lg": ["LG08"],
+        "title": "โจทย์ทดสอบ LG08",
+        "situation": "สถานการณ์ทดสอบโจทย์ฝึก",
+        "input": "ข้อมูลนำเข้าทดสอบ",
+        "process": "ประมวลผลทดสอบ",
+        "output": "ผลลัพธ์ทดสอบ",
+        "structure": "Sequence",
+        "buggy_algorithm": None,
+        "bug_type": None,
+        "bug_location": None,
+        "edge_case": None,
+    },
+]
 
 
 class FakeMessage:
@@ -91,7 +113,23 @@ class LearningFlowTest(unittest.TestCase):
         )
         self.registry_patch.start()
 
+        self.bank_path = os.path.join(self.tmpdir, "problem_bank.json")
+        with open(self.bank_path, "w", encoding="utf-8") as file:
+            json.dump(SAMPLE_PROBLEMS, file, ensure_ascii=False)
+
+        self.bank_patch = patch.object(
+            problem_service, "PROBLEM_BANK_PATH", self.bank_path
+        )
+        self.bank_patch.start()
+
+        self.problem_log_path = os.path.join(self.tmpdir, "problem_logs.json")
+        self.problem_log_patch = patch.object(
+            logger, "PROBLEM_LOG_PATH", self.problem_log_path
+        )
+        self.problem_log_patch.start()
+
         main.pending_learning_sessions.clear()
+        main.active_problem_context.clear()
 
         self.channel = FakeChannel()
         self.author = FakeAuthor()
@@ -102,6 +140,8 @@ class LearningFlowTest(unittest.TestCase):
     def tearDown(self):
         self.log_patch.stop()
         self.registry_patch.stop()
+        self.bank_patch.stop()
+        self.problem_log_patch.stop()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def _answer(self, text):
@@ -118,20 +158,18 @@ class LearningFlowTest(unittest.TestCase):
             self.assertTrue(qp.get("system_question"))
             self.assertTrue(qp.get("question_id", "").startswith("Q"))
 
-    def test_non_practice_question_does_not_start_practice(self):
-        """คำถามทั่วไปต้องไม่ถูกบังคับเข้าโหมดโจทย์ฝึก"""
-        with patch.object(main, "ask_ai", fake_ai), \
-             patch.object(main, "ask_grounded_answer",
-                          lambda q, c: "คำอธิบายจำลอง"):
-            asyncio.run(main.start_algorithm_flow(self.ctx, "Algorithm คืออะไร"))
+    def test_problem_command_sets_active_problem_for_alg(self):
+        """!problem <id> ต้องบันทึกโจทย์ไว้ให้ !alg ใช้เริ่ม session ต่อได้"""
+        asyncio.run(main.problem.callback(self.ctx, problem_id="P-LG08"))
 
-        session = self._session()
-        if session is not None:
-            self.assertFalse(session.get("practice_mode", False))
+        stored = main.active_problem_context.get(self.author.id)
+        self.assertIsNotNone(stored)
+        self.assertEqual(stored["id"], "P-LG08")
 
-    def test_full_practice_flow(self):
+    def test_full_problem_bank_flow(self):
         """
-        LG08 (โหมดฝึก) มี Planning 1 ข้อ (ถามครั้งเดียวต่อ session),
+        !problem P-LG08 แล้ว !alg เริ่ม Adaptive Learning Session จากโจทย์
+        นั้น (แท็ก LG08) มี Planning 1 ข้อ (ถามครั้งเดียวต่อ session),
         Monitoring 1 ข้อ, Evaluation 1 ข้อ ตาม QP.xlsx เส้นทางที่ถูกต้องคือ:
 
         Planning (1 ข้อ) -> ALGORITHM_ANSWER (PARTIAL + hint เป็น sub-turn)
@@ -158,25 +196,23 @@ class LearningFlowTest(unittest.TestCase):
              patch.object(main, "evaluate_student_response",
                           lambda *a, **k: next(evaluations)):
 
-            asyncio.run(main.start_algorithm_flow(self.ctx, "ขอโจทย์ฝึกหน่อย"))
+            asyncio.run(main.problem.callback(self.ctx, problem_id="P-LG08"))
+            asyncio.run(main.start_algorithm_flow(self.ctx, None))
+
             s = self._session()
             self.assertIsNotNone(s)
             self.assertEqual(s["phase"], "PLANNING_QP")
-            self.assertEqual(s["question_id"], "PRACTICE")
-            self.assertIsNotNone(s["session_id"], "โหมดฝึกต้องมี Learning Log")
+            self.assertEqual(s["problem_id"], "P-LG08")
+            self.assertEqual(s["lg_id"], "LG08")
+            self.assertIsNotNone(s["session_id"], "ต้องมี Learning Log")
             self.assertIsNone(
                 s["hint_question_id"],
                 "ยังไม่ตอบ Planning จึงยังไม่ควรมี hint_question_id",
-            )
-            self.assertNotIn(
-                "planning_questions", s,
-                "ตัด planning_questions loop ออกแล้ว ไม่ควรมี key นี้อีก",
             )
             self.assertEqual(s["main_question_count"], 1)
 
             # --------------------------------------------------
             # Planning: ถามครั้งเดียว แล้วไปเขียน Algorithm ทันที
-            # (ไม่ใช่ไป Monitoring ก่อนเหมือนเดิม)
             # --------------------------------------------------
             self._answer("ต้องรับคะแนนแล้วคำนวณเกรด")      # ตอบ Planning ข้อเดียว
             s = self._session()
@@ -205,7 +241,6 @@ class LearningFlowTest(unittest.TestCase):
 
             # --------------------------------------------------
             # ALGORITHM_ANSWER: PARTIAL -> hint เป็น sub-turn
-            # (ต้องไม่แวะ Monitoring ไม่นับเป็นคำถามหลักเพิ่ม)
             # --------------------------------------------------
             self._answer("1. เริ่ม 2. รับคะแนน 3. จบ")       # PARTIAL
             s = self._session()
@@ -220,7 +255,6 @@ class LearningFlowTest(unittest.TestCase):
 
             # --------------------------------------------------
             # ALGORITHM_ANSWER -> GOOD: ข้าม Monitoring ไปหา Evaluation เลย
-            # (ต่างจาก MAX_ATTEMPTS_REACHED ที่ยังแวะ Monitoring ก่อน)
             # --------------------------------------------------
             self._answer("1. เริ่ม 2. รับคะแนน 3. คำนวณ 4. แสดงผล 5. จบ")  # GOOD
             s = self._session()
@@ -230,7 +264,6 @@ class LearningFlowTest(unittest.TestCase):
             )
             self.assertEqual(s["main_question_count"], 2)
 
-            # feedback ของผลประเมิน GOOD กับคำถาม Evaluation ต้องแยกคนละข้อความ
             good_feedback_msg = self.channel.sent[-2]
             evaluation_question_msg = self.channel.sent[-1]
             self.assertIn("ผลการวิเคราะห์คำตอบ", good_feedback_msg)

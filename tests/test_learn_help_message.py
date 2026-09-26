@@ -1,8 +1,12 @@
 """
-ทดสอบ help message ของ !alg เมื่อพิมพ์โดยไม่มีข้อความต่อท้าย
+ทดสอบ help message ของ !learn เมื่อพิมพ์โดยไม่มีข้อความต่อท้าย
+
+!learn รับช่วงต่อจาก !alg ในการถามคำถามอิสระ/ความรู้ทั่วไป เพราะ !alg
+ตอนนี้ทำงานเฉพาะกับโจทย์ที่เลือกไว้ผ่าน !problem เท่านั้น ไม่รับคำถาม
+อิสระอีกต่อไป
 
 วิธีรัน (จากโฟลเดอร์หลักของโปรเจกต์):
-    python -m unittest tests.test_alg_help_message -v
+    python -m unittest tests.test_learn_help_message -v
 """
 
 import asyncio
@@ -61,7 +65,7 @@ class FakeCtx:
         return await self.channel.send(text, **kwargs)
 
 
-class AlgHelpMessageTest(unittest.TestCase):
+class LearnHelpMessageTest(unittest.TestCase):
 
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
@@ -90,14 +94,14 @@ class AlgHelpMessageTest(unittest.TestCase):
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     EXPECTED_EXAMPLES = [
-        "!alg ทำไมต้องวิเคราะห์โจทย์ก่อนเขียนอัลกอริทึม?",
-        "!alg loop กับ if ต่างกันยังไง?",
-        "!alg จะรู้ได้ยังไงว่าโจทย์นี้ต้องใช้การวนซ้ำ?",
-        "!alg ขั้นตอนแรกของการออกแบบอัลกอริทึมคืออะไร?",
+        "!learn ทำไมต้องวิเคราะห์โจทย์ก่อนเขียนอัลกอริทึม?",
+        "!learn loop กับ if ต่างกันยังไง?",
+        "!learn จะรู้ได้ยังไงว่าโจทย์นี้ต้องใช้การวนซ้ำ?",
+        "!learn ขั้นตอนแรกของการออกแบบอัลกอริทึมคืออะไร?",
     ]
 
-    def test_alg_with_no_question_shows_usage_examples(self):
-        asyncio.run(main.start_algorithm_flow(self.ctx, None))
+    def test_learn_with_no_question_shows_usage_examples(self):
+        asyncio.run(main.start_learn_flow(self.ctx, None))
 
         self.assertEqual(len(self.channel.sent), 1)
         sent_message = self.channel.sent[0]
@@ -109,24 +113,24 @@ class AlgHelpMessageTest(unittest.TestCase):
         # ไม่ควรเริ่ม session ใด ๆ เมื่อยังไม่มีคำถามจริง
         self.assertIsNone(main.pending_learning_sessions.get(self.author.id))
 
-    def test_alg_with_blank_whitespace_question_shows_usage_examples(self):
-        asyncio.run(main.start_algorithm_flow(self.ctx, "   "))
+    def test_learn_with_blank_whitespace_question_shows_usage_examples(self):
+        asyncio.run(main.start_learn_flow(self.ctx, "   "))
 
         sent_message = self.channel.sent[0]
         self.assertIn("ลองถามแบบนี้ได้เลย", sent_message)
 
-    def test_alg_command_callback_with_no_argument(self):
-        asyncio.run(main.alg.callback(self.ctx, question=None))
+    def test_learn_command_callback_with_no_argument(self):
+        asyncio.run(main.learn.callback(self.ctx, question=None))
 
         sent_message = self.channel.sent[0]
         self.assertIn("ลองถามแบบนี้ได้เลย", sent_message)
 
     def test_unregistered_learner_still_sees_registration_gate_first(self):
-        # registration ถูกเช็คก่อนทุก entry point ของ !alg (ตามดีไซน์เดิม)
+        # registration ถูกเช็คก่อนทุก entry point ของ !learn (ตามดีไซน์เดิม)
         # แม้เป็นแค่การขอดู usage help ก็ยังต้องลงทะเบียนก่อน
         os.remove(self.registry_path)
 
-        asyncio.run(main.start_algorithm_flow(self.ctx, None))
+        asyncio.run(main.start_learn_flow(self.ctx, None))
 
         sent_message = self.channel.sent[0]
         self.assertIn("ลงทะเบียนก่อนใช้งาน", sent_message)

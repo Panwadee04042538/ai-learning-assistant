@@ -7,6 +7,8 @@
    ขอเปลี่ยนรหัส (ต้องยืนยันก่อน), รหัสซ้ำกับ user อื่น
 3. บังคับลงทะเบียนก่อนใช้งาน: !alg (ผ่าน start_algorithm_flow) และ
    ข้อความ plain text ทั่วไป (ผ่าน on_message)
+   (!alg ต้องมีโจทย์ที่เลือกไว้ผ่าน !problem ก่อน จึงจำลองด้วยการตั้งค่า
+   main.active_problem_context ตรง ๆ แทนการเรียก !problem จริง)
 
 วิธีรัน (จากโฟลเดอร์หลักของโปรเจกต์):
     python -m unittest tests.test_registry -v
@@ -217,6 +219,7 @@ class RegistrationRequiredTest(unittest.TestCase):
 
         main.pending_learning_sessions.clear()
         main.pending_registration_changes.clear()
+        main.active_problem_context.clear()
 
         self.channel = FakeChannel()
         self.author = FakeAuthor(6001)
@@ -239,11 +242,11 @@ class RegistrationRequiredTest(unittest.TestCase):
 
     def test_alg_works_after_registering(self):
         register_student(self.author.id, "S-6001")
+        main.active_problem_context[self.author.id] = {
+            "id": "P01", "lg": ["LG02"], "situation": "สถานการณ์ทดสอบ",
+        }
 
-        with patch.object(main, "ask_grounded_answer", lambda q, c: "mock"):
-            asyncio.run(
-                main.start_algorithm_flow(self.ctx, "Algorithm คืออะไร")
-            )
+        asyncio.run(main.start_algorithm_flow(self.ctx, None))
 
         self.assertIsNotNone(main.pending_learning_sessions.get(self.author.id))
 
@@ -271,11 +274,11 @@ class RegistrationRequiredTest(unittest.TestCase):
 
     def test_learning_log_records_student_id(self):
         register_student(self.author.id, "S-6001")
+        main.active_problem_context[self.author.id] = {
+            "id": "P01", "lg": ["LG02"], "situation": "สถานการณ์ทดสอบ",
+        }
 
-        with patch.object(main, "ask_grounded_answer", lambda q, c: "mock"):
-            asyncio.run(
-                main.start_algorithm_flow(self.ctx, "Algorithm คืออะไร")
-            )
+        asyncio.run(main.start_algorithm_flow(self.ctx, None))
 
         with open(self.log_path, encoding="utf-8") as f:
             import json

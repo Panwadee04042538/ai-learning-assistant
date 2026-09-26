@@ -599,6 +599,11 @@ def detect_learning_goal(question):
 
 pending_learning_sessions = {}
 pending_registration_changes = {}
+
+# user_id -> problem dict ล่าสุดที่เลือกดูผ่าน !problem
+# ใช้ให้ !alg เช็คว่ามีโจทย์ที่กำลังทำงานอยู่หรือยัง
+active_problem_context = {}
+
 MAX_ATTEMPTS = 3
 
 REGISTRATION_REQUIRED_MESSAGE = (
@@ -995,6 +1000,25 @@ async def handle_qp_response(message, session):
         "feedback": qp_feedback,
     })
 
+    # !learn ถามความรู้ทั่วไปแค่ QP เดียวแล้วจบเลย ไม่ว่าคำถามนั้นจะมาจาก
+    # Phase ไหนก็ตาม (ไม่มีขั้นส่ง Algorithm ไม่ว่า LG ไหนก็ตาม)
+    if session.get("is_learn_session"):
+        await send_long_message(
+            message.channel,
+            "## 🪞 สรุปคำตอบ\n\n"
+            f"{qp_feedback}\n\n"
+            "🎉 จบการเรียนรู้ครั้งนี้แล้ว"
+        )
+
+        session_id = session.get("session_id")
+        if session_id:
+            complete_learning_session(
+                session_id=session_id,
+                final_status="COMPLETED"
+            )
+        pending_learning_sessions.pop(message.author.id, None)
+        return
+
     if phase == "PLANNING_QP":
         # ส่ง feedback ของคำถามวางแผนก่อน (Planning มีแค่ 1 คำถามต่อ session)
         await send_long_message(
@@ -1003,43 +1027,12 @@ async def handle_qp_response(message, session):
             f"{qp_feedback}"
         )
 
+        # PLANNING_QP ตอนนี้มาจาก session ที่ทำโจทย์จาก Problem Bank เท่านั้น
+        # (!learn ใช้ QP เดียวจบ ไม่ผ่านจุดนี้ ดู is_learn_session ด้านบน)
+        # จึงไปลงมือเขียน Algorithm เสมอ ไม่ว่า LG ที่แท็กไว้กับโจทย์จะเป็น
+        # อะไรก็ตาม Monitoring ถูกย้ายไปถามหลังประเมิน Algorithm แล้วแทน
+        # (ดู MONITORING_QP_POST_ALGORITHM ด้านล่าง) ไม่ใช่ก่อนส่ง Algorithm
         lg_id = session.get("lg_id")
-
-        # เฉพาะ LG08 (โหมดฝึกออกแบบ Algorithm จากสถานการณ์) เท่านั้นที่ให้
-        # เขียน/ส่ง Algorithm ต่อ LG อื่นหลัง Planning ให้ไป Evaluation เลย
-        if lg_id != "LG08":
-            evaluation_qp = get_session_qp(
-                lg_id, "Evaluation",
-                exclude_question_ids=[
-                    q.get("question_id") for q in session.get("qp_responses", [])
-                ]
-            )
-
-            if evaluation_qp:
-                session["active_qp"] = evaluation_qp
-                session["phase"] = "EVALUATION_QP"
-                session["main_question_count"] = (
-                    session.get("main_question_count", 1) + 1
-                )
-                await send_long_message(
-                    message.channel,
-                    "### 🪞 สะท้อนก่อนจบ\n\n"
-                    f"{evaluation_qp.get('system_question', '-')}"
-                )
-                return
-
-            # ไม่พบคำถาม Evaluation (ผิดปกติ เพราะทุก LG ควรมี Evaluation)
-            session_id = session.get("session_id")
-            if session_id:
-                complete_learning_session(
-                    session_id=session_id, final_status="COMPLETED"
-                )
-            pending_learning_sessions.pop(message.author.id, None)
-            return
-
-        # LG08: ไปลงมือเขียน Algorithm ทันที Monitoring ถูกย้ายไปถามหลัง
-        # ประเมิน Algorithm แล้วแทน (ดู MONITORING_QP_POST_ALGORITHM ด้านล่าง)
-        # ไม่ใช่ก่อนส่ง Algorithm เหมือนเดิมอีกต่อไป
 
         # แอบดูว่า Monitoring ข้อไหนจะถูกถามทีหลัง เพื่อผูก hint_question_id
         # ไว้ล่วงหน้า (คำใบ้ระหว่างเขียน Algorithm อ้างอิงคำถาม Monitoring
@@ -1270,43 +1263,6 @@ async def handle_lg01_opening_response(message, session):
     )
 
     pending_learning_sessions.pop(message.author.id, None)
-
-
-# ==================================================
-# Practice Request Detection
-# ==================================================
-
-def is_practice_request(question):
-    """
-    ตรวจว่าผู้เรียนกำลังขอแบบฝึกหัด/โจทย์ฝึกหรือไม่
-    """
-
-    if not question:
-        return False
-
-    text = question.strip().lower()
-
-    practice_patterns = [
-        "ขอโจทย์ฝึก",
-        "ขอโจทย์ฝึกหน่อย",
-        "ขอโจทย์",
-        "ขอแบบฝึก",
-        "ขอแบบฝึกทำ",
-        "ขอแบบฝึกหัด",
-        "ขอแบบฝึกหัดฝึกทำ",
-        "ขอแบบฝึกหัดฝึกทำหน่อย",
-        "มีโจทย์ให้ฝึก",
-        "มีโจทย์ให้ลองทำ",
-        "อยากลองทำโจทย์",
-        "ขอ exercise",
-        "ขอโจทย์ algorithm",
-        "ขอแบบฝึก algorithm",
-    ]
-
-    return any(
-        pattern in text
-        for pattern in practice_patterns
-    )
 
 
 def is_general_knowledge_question(question):
@@ -1574,21 +1530,20 @@ async def handle_help_trigger(message, session, category):
 # Algorithm Knowledge Test
 # ==================================================
 
-async def start_algorithm_flow(ctx, question=None):
-    
+async def start_learn_flow(ctx, question=None):
+
 
     """
-    Test Flow
+    !learn: ถามความรู้ทั่วไป (เช่น "loop คืออะไร")
 
-    Input
-        ↓
-    Knowledge Retrieval
-        ↓
-    Knowledge Unit
-        ↓
-    Related Learning Goal
-        ↓
-    Display Result
+    Flow:
+        detect Learning Goal
+            ↓
+        Grounded Answer (คำอธิบายกระชับ ถ้าเป็นคำถามความรู้ทั่วไป)
+            ↓
+        QP 1 ข้อจาก QP.xlsx
+            ↓
+        จบ (ไม่มีขั้นส่ง Algorithm ไม่ว่า LG ไหนก็ตาม)
     """
 
     if not is_registered(ctx.author.id):
@@ -1597,139 +1552,9 @@ async def start_algorithm_flow(ctx, question=None):
 
     if ctx.author.id in pending_learning_sessions:
         await ctx.send(
-            "⚠️ มี session ค้างอยู่ ส่ง Algorithm มาได้เลย "
+            "⚠️ มี session ค้างอยู่ ตอบคำถามปัจจุบันก่อน "
             "หรือพิมพ์ `!cancel` เพื่อเริ่มใหม่"
         )
-        return
-
-    if is_practice_request(question):
-
-        practice_prompt = f"""
-        คุณคือ AI Learning Assistant ผู้เรียนกำลังขอ "โจทย์ฝึกทำ" เรื่อง Algorithm
-        คำขอ:
-        {question}
-
-ให้สร้างโจทย์ฝึกจำนวน 1 ข้อ
-
-ข้อกำหนด:
-- เหมาะกับนักเรียนระดับอาชีวศึกษา
-- เป็นสถานการณ์ที่สามารถเขียน Algorithm ได้จริง
-- ให้ผู้เรียนต้องคิด Input, Process และ Output
-- อาจมี Sequence, Selection หรือ Loop ตามความเหมาะสม
-- ห้ามเฉลย
-- ห้ามเขียน Algorithm สำเร็จรูป
-- ให้คำถามชี้นำสั้น ๆ ไม่เกิน 3 ข้อ
-- ตอบสั้น กระชับ
-- ภาษาไทย
-
-รูปแบบ:
-
-### 📝 โจทย์ฝึก
-[โจทย์]
-
-### 💭 คำถามช่วยคิด
-1. Input คืออะไร?
-2. Process ต้องทำอะไร?
-3. Output คืออะไร?
-
-### 🚀 ลองทำ
-ให้ผู้เรียนเขียน Algorithm ด้วยตนเอง
-"""
-
-        try:
-
-            practice_answer = await asyncio.to_thread(
-                ask_ai,
-                practice_prompt
-            )
-
-        except Exception as e:
-
-            practice_answer = (
-                "❌ ไม่สามารถสร้างโจทย์ฝึกได้ในขณะนี้\n"
-                f"`{type(e).__name__}: {e}`"
-            )
-
-        planning_qp = get_session_qp("LG08", "Planning")
-
-        planning_text = (
-            "\n\n### 🧠 วางแผนก่อนลงมือ\n\n"
-            f"{planning_qp.get('system_question', '-')}\n\n"
-            "✍️ **พิมพ์คำตอบของคุณใน Chat ได้เลย**"
-            if planning_qp else
-            "\n\n### ⚠️ ไม่พบคำถามวางแผนจาก QP.xlsx\n\n"
-            "ระบบจะให้คุณลงมือเขียน Algorithm ได้เลย"
-        )
-
-        message = (
-            "## 📝 โจทย์ฝึก Algorithm\n\n"
-            f"{practice_answer}"
-            f"{planning_text}\n\n"
-            "💡 ตอบคำถามวางแผนก่อน แล้วระบบจะให้คุณลงมือเขียน Algorithm"
-        )
-        await send_long_message(ctx, message)
-
-        algorithm_question = (
-            "จากโจทย์สถานการณ์ที่กำหนด "
-            "จงเขียน Algorithm เพื่อแก้ปัญหา "
-            "โดยระบุขั้นตอนการทำงานให้ชัดเจน"
-        )
-
-        print(f"[PRACTICE QP] planning_qp={planning_qp}")
-
-        # บันทึก Learning Log ของโหมดฝึก เพื่อใช้เป็นข้อมูลวิจัย
-        practice_log = add_learning_log(
-            user_id=ctx.author.id,
-            username=str(ctx.author),
-            user_question=question,
-            ku_id=None,
-            ku_title=None,
-            lg_id="LG08",
-            lg_name="ฝึกออกแบบ Algorithm จากสถานการณ์",
-            qp_id=planning_qp.get("qp_id") if planning_qp else None,
-            question_id="PRACTICE",
-            system_question=practice_answer,
-            student_id=get_student_id(ctx.author.id)
-        )
-
-        pending_learning_sessions[ctx.author.id] = {
-            "learning_goal": "LG08 — ฝึกออกแบบ Algorithm จากสถานการณ์",
-            "question": algorithm_question,
-            "algorithm_question": algorithm_question,
-            "ku_id": None,
-            "lg_id": "LG08",
-            "question_id": "PRACTICE",
-            "hint_question_id": None,
-            "attempt": 1,
-            "max_attempts": MAX_ATTEMPTS,
-            "hint_level": 0,
-            "attempt_history": [],
-            "qp_responses": [],
-            "active_qp": planning_qp,
-            "phase": "PLANNING_QP" if planning_qp else "ALGORITHM_ANSWER",
-            "main_question_count": 1,
-            "reflection_shown": False,
-            "expected_evidence": "",
-            "session_id": (
-                practice_log.get("session_id") if practice_log else None
-            ),
-            "practice_mode": True,
-            "practice_prompt": practice_answer
-        }
-
-        print("\n========== PRACTICE SESSION CREATED ==========")
-
-        print(f"User ID: {ctx.author.id}")
-
-        print("LG: LG08")
-
-        print("Question ID: PRACTICE")
-
-        print("Session:", pending_learning_sessions[ctx.author.id])
-
-        print("==============================================\n")
-
-
         return
 
     # ----------------------------------------------
@@ -1740,10 +1565,10 @@ async def start_algorithm_flow(ctx, question=None):
 
         await ctx.send(
             "💡 ลองถามแบบนี้ได้เลย\n\n"
-            "!alg ทำไมต้องวิเคราะห์โจทย์ก่อนเขียนอัลกอริทึม?\n"
-            "!alg loop กับ if ต่างกันยังไง?\n"
-            "!alg จะรู้ได้ยังไงว่าโจทย์นี้ต้องใช้การวนซ้ำ?\n"
-            "!alg ขั้นตอนแรกของการออกแบบอัลกอริทึมคืออะไร?"
+            "!learn ทำไมต้องวิเคราะห์โจทย์ก่อนเขียนอัลกอริทึม?\n"
+            "!learn loop กับ if ต่างกันยังไง?\n"
+            "!learn จะรู้ได้ยังไงว่าโจทย์นี้ต้องใช้การวนซ้ำ?\n"
+            "!learn ขั้นตอนแรกของการออกแบบอัลกอริทึมคืออะไร?"
         )
 
         return
@@ -2103,7 +1928,10 @@ Learning Goal:
         "phase": PHASE_TO_SESSION_KEY.get(session_phase, "EVALUATION_QP"),
         "main_question_count": 1,
         "reflection_shown": False,
-        "session_id": log_entry.get("session_id") if log_entry else None
+        "session_id": log_entry.get("session_id") if log_entry else None,
+        # !learn ถามความรู้ทั่วไปแค่ 1 QP แล้วจบเลย ไม่ว่า LG ไหนก็ตาม
+        # ไม่มีขั้นส่ง Algorithm (ดูจุดเช็คนี้ใน handle_qp_response)
+        "is_learn_session": True
     }
 
     # ----------------------------------------------
@@ -2241,13 +2069,158 @@ Learning Goal:
 
 
 # ==================================================
-# Algorithm Command
+# !alg: ทำ Adaptive Learning Session จากโจทย์ที่เลือกไว้ผ่าน !problem
 # ==================================================
+# !alg ไม่รับคำถามอิสระอีกต่อไป (ย้ายไปอยู่ที่ !learn แทน) หน้าที่เดียว
+# ของ !alg คือเริ่ม/ทำต่อ Adaptive Learning Session จากโจทย์ที่เลือกไว้แล้ว
+
+async def _start_problem_algorithm_session(ctx, problem):
+    """
+    เริ่ม Adaptive Learning Session จากโจทย์ใน Problem Bank โดยตรง
+    (ไม่มี Grounded Answer เพราะผู้เรียนเห็นโจทย์เต็มจาก !problem ไปแล้ว)
+
+    ไม่ว่า LG ที่แท็กไว้กับโจทย์จะเป็นอะไร (ไม่จำเป็นต้องเป็น LG08)
+    session นี้ต้องให้ผู้เรียนได้เขียน/ส่ง Algorithm จริงเสมอ เพราะเป็น
+    จุดประสงค์หลักของ Problem Bank (เห็นได้จาก session["problem_id"]
+    ที่ handle_qp_response ใช้เป็นเงื่อนไขเพิ่มเติมนอกจาก LG08)
+    """
+
+    problem_id = problem.get("id", "-")
+    lg_tags = problem.get("lg") or []
+    lg_id = lg_tags[0] if lg_tags else None
+
+    if not lg_id:
+        await ctx.send(
+            f"⚠️ โจทย์ {problem_id} ไม่มีข้อมูล Learning Goal กำหนดไว้\n\n"
+            "ระบบจึงยังไม่สามารถเริ่ม Adaptive Learning Session ได้"
+        )
+        return
+
+    goal = learning_goal_service.get_learning_goal_by_id(lg_id)
+    learning_goal = (
+        goal.get("learning_goal", "ไม่พบชื่อ Learning Goal")
+        if goal else "ไม่พบชื่อ Learning Goal"
+    )
+
+    session_phase, learning_question = pick_initial_session_phase_and_qp(lg_id)
+
+    if not learning_question:
+        await ctx.send(
+            f"⚠️ ไม่พบคำถามสำหรับ Learning Goal {lg_id} ของโจทย์ {problem_id}\n\n"
+            "ระบบจึงยังไม่เริ่ม Adaptive Learning Session"
+        )
+        return
+
+    algorithm_question = problem.get("situation", "-")
+
+    log_entry = add_learning_log(
+        user_id=ctx.author.id,
+        username=str(ctx.author),
+        user_question=f"!alg {problem_id}",
+        ku_id=None,
+        ku_title=None,
+        lg_id=lg_id,
+        lg_name=learning_goal,
+        qp_id=learning_question.get("qp_id"),
+        question_id=learning_question.get("question_id"),
+        system_question=learning_question.get("system_question"),
+        student_id=get_student_id(ctx.author.id)
+    )
+
+    active_qp = learning_question
+
+    # ถ้า session เริ่มที่ Monitoring ทันที (LG ที่ไม่มีขั้น Planning)
+    # ให้ผูก hint_question_id กับคำถาม Monitoring ข้อนี้ไว้เลย
+    hint_question_id = (
+        active_qp.get("question_id") if session_phase == "Monitoring" else None
+    )
+
+    pending_learning_sessions[ctx.author.id] = {
+        "learning_goal": learning_goal,
+        "question": active_qp.get("system_question", algorithm_question),
+        "algorithm_question": algorithm_question,
+        "ku_id": None,
+        "lg_id": lg_id,
+        "question_id": active_qp.get("question_id"),
+        "qp_id": active_qp.get("qp_id"),
+        "problem_id": problem_id,
+        "hint_question_id": hint_question_id,
+        "attempt": 1,
+        "max_attempts": MAX_ATTEMPTS,
+        "hint_level": 0,
+        "attempt_history": [],
+        "qp_responses": [],
+        "active_qp": active_qp,
+        "phase": PHASE_TO_SESSION_KEY.get(session_phase, "EVALUATION_QP"),
+        "main_question_count": 1,
+        "reflection_shown": False,
+        "session_id": log_entry.get("session_id") if log_entry else None
+    }
+
+    message = (
+        f"### 🎯 เริ่มทำโจทย์ {problem_id}\n\n"
+        f"**LG:** {lg_id} — {learning_goal}\n\n"
+    )
+
+    if session_phase == "Monitoring":
+        message += (
+            "### 🔍 ขั้นตรวจสอบ Algorithm\n\n"
+            "โจทย์นี้ไม่มีขั้นวางแผน คุณจะได้ตรวจสอบ Algorithm "
+            "ที่เกี่ยวข้องกับโจทย์นี้โดยตรง กรุณาตอบคำถามต่อไปนี้"
+            "เพื่อเริ่มตรวจสอบ\n\n"
+            f"{active_qp.get('system_question', '-')}"
+        )
+    else:
+        message += (
+            "### 🧠 คำถามช่วยคิด\n\n"
+            f"{active_qp.get('system_question', '-')}"
+        )
+
+    await send_long_message(ctx, message)
+
+
+async def start_algorithm_flow(ctx, question=None):
+
+    if not is_registered(ctx.author.id):
+        await ctx.send(REGISTRATION_REQUIRED_MESSAGE)
+        return
+
+    if ctx.author.id in pending_learning_sessions:
+        await ctx.send(
+            "⚠️ มี session ค้างอยู่ ส่ง Algorithm มาได้เลย "
+            "หรือพิมพ์ `!cancel` เพื่อเริ่มใหม่"
+        )
+        return
+
+    problem = active_problem_context.get(ctx.author.id)
+
+    if not problem:
+        await ctx.send(
+            "⚠️ กรุณาพิมพ์ !problem ก่อน เช่น `!problem P07`\n"
+            "หรือใช้ `!learn` ถ้าอยากถามความรู้ทั่วไป"
+        )
+        return
+
+    await _start_problem_algorithm_session(ctx, problem)
+
 
 @bot.command()
 async def alg(ctx, *, question=None):
 
     await start_algorithm_flow(
+        ctx,
+        question
+    )
+
+
+# ==================================================
+# Learn Command
+# ==================================================
+
+@bot.command()
+async def learn(ctx, *, question=None):
+
+    await start_learn_flow(
         ctx,
         question
     )
@@ -2327,6 +2300,10 @@ async def problem(ctx, problem_id=None):
         round_number=found_problem.get("round"),
         student_id=get_student_id(ctx.author.id)
     )
+
+    # จำโจทย์ที่เพิ่งเลือกไว้ ให้ !alg ใช้เริ่ม Adaptive Learning Session
+    # จากโจทย์นี้ได้ต่อ
+    active_problem_context[ctx.author.id] = found_problem
 
 
 # ==================================================

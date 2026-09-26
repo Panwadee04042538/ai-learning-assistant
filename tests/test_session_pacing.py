@@ -90,6 +90,7 @@ class BaseSessionTest(unittest.TestCase):
         self.registry_patch.start()
 
         main.pending_learning_sessions.clear()
+        main.active_problem_context.clear()
 
         self.channel = FakeChannel()
         self.author = FakeAuthor(BaseSessionTest.NEXT_ID)
@@ -111,73 +112,68 @@ class BaseSessionTest(unittest.TestCase):
 
 
 class PlanningSingleQuestionTest(BaseSessionTest):
-    """งานที่ 1: ขั้น Planning มีคำถามเดียวต่อ session แล้วไป Evaluation
-    ทันที (เฉพาะ LG08 เท่านั้นที่ยังมีขั้นเขียน/ส่ง Algorithm ต่อ LG อื่น
-    ข้าม ALGORITHM_ANSWER ไปเลย)"""
+    """งานที่ 1: ขั้น Planning มีคำถามเดียวต่อ session แล้วไปเขียน Algorithm
+    ทันที (!alg ผูกกับโจทย์จาก Problem Bank เสมอ จึงเขียน Algorithm ไม่ว่า
+    LG ที่แท็กไว้กับโจทย์จะเป็นอะไรก็ตาม ไม่ใช่เฉพาะ LG08 เท่านั้น)"""
 
-    def test_lg02_planning_asks_one_question_then_goes_straight_to_evaluation(self):
+    def test_lg02_tagged_problem_planning_asks_one_question_then_writes_algorithm(self):
         # LG02 มีคำถาม Planning หลายข้อใน QP.xlsx (Q04, Q05, Q06) แต่ session
-        # ต้องถามแค่ข้อแรกแล้วไป Evaluation ทันที ไม่ถามต่อทีละข้อ และไม่ต้อง
-        # เขียน Algorithm เลย (เฉพาะ LG08 เท่านั้นที่มีขั้นเขียน Algorithm)
-        with patch.object(main, "ask_grounded_answer", lambda q, c: "mock"), \
-             patch.object(main, "ask_ai", lambda p: "mock feedback"):
+        # ต้องถามแค่ข้อแรกแล้วไปเขียน Algorithm ทันที ไม่ถามต่อทีละข้อ
+        main.active_problem_context[self.author.id] = {
+            "id": "P-TEST", "lg": ["LG02"], "situation": "สถานการณ์ทดสอบ",
+        }
 
-            asyncio.run(
-                main.start_algorithm_flow(self.ctx, "วิเคราะห์โจทย์ยังไง")
-            )
+        with patch.object(main, "ask_ai", lambda p: "mock feedback"):
+
+            asyncio.run(main.start_algorithm_flow(self.ctx, None))
 
             s = self._session()
             self.assertEqual(s["lg_id"], "LG02")
+            self.assertEqual(s["problem_id"], "P-TEST")
             self.assertEqual(s["phase"], "PLANNING_QP")
-            self.assertNotIn(
-                "planning_questions", s,
-                "ตัด planning_questions loop ออกแล้ว ไม่ควรมี key นี้อีก",
-            )
             self.assertEqual(s["main_question_count"], 1)
             planning_question_id = s["active_qp"]["question_id"]
             self.assertTrue(planning_question_id)
 
-            # ตอบคำถาม Planning ข้อเดียว -> ต้องไป Evaluation ทันที
-            # (LG02 ไม่ใช่ LG08 จึงไม่ต้องเขียน Algorithm)
+            # ตอบคำถาม Planning ข้อเดียว -> ต้องไปเขียน Algorithm ทันที
+            # แม้ LG02 จะไม่ใช่ LG08 ก็ตาม เพราะมาจากโจทย์ Problem Bank
             self._answer("โจทย์ต้องการคำนวณเกรด")
             s = self._session()
             self.assertEqual(
-                s["phase"], "EVALUATION_QP",
-                "LG อื่นนอกจาก LG08 หลังตอบ Planning ต้องไป Evaluation เลย "
-                "ไม่ต้องเขียน Algorithm",
+                s["phase"], "ALGORITHM_ANSWER",
+                "โจทย์จาก Problem Bank ต้องให้เขียน Algorithm เสมอไม่ว่า LG ใด",
             )
-            self.assertEqual(s["main_question_count"], 2)
+            self.assertEqual(
+                s["main_question_count"], 1,
+                "Algorithm ยังไม่ถูกประเมิน จึงยังไม่นับเป็นคำถามหลักข้อใหม่",
+            )
 
             metacog_phases = [r["phase"] for r in s["qp_responses"]]
             self.assertEqual(metacog_phases, ["PLANNING_QP"])
 
-            # feedback กับคำถาม Evaluation ต้องแยกคนละข้อความ ไม่รวมกัน
+            # feedback กับ "ลองทำโจทย์" ต้องแยกคนละข้อความ ไม่รวมกัน
             feedback_msg = self.channel.sent[-2]
-            evaluation_question_msg = self.channel.sent[-1]
+            algorithm_prompt_msg = self.channel.sent[-1]
             self.assertIn("mock feedback", feedback_msg)
-            self.assertNotIn("🪞", feedback_msg)
-            self.assertIn("🪞", evaluation_question_msg)
-            self.assertNotIn("mock feedback", evaluation_question_msg)
-
-            # ตอบ Evaluation แล้วต้องจบ session เลย ไม่มีขั้น Algorithm/
-            # Monitoring เข้ามาเกี่ยวข้องสำหรับ LG นี้
-            self._answer("แก้ปัญหาได้ เพราะทดสอบกับตัวอย่างแล้ว")
-            self.assertIsNone(self._session(), "Session ต้องถูกปิดเมื่อจบ")
+            self.assertNotIn("ลองทำโจทย์", feedback_msg)
+            self.assertIn("ลองทำโจทย์", algorithm_prompt_msg)
 
 
 class NoPlanningStartsAtMonitoringTest(BaseSessionTest):
-    """งานที่ 2: LG05/LG07 ไม่มีขั้น Planning ต้องเริ่มที่ Monitoring
-    พร้อมข้อความ context"""
+    """งานที่ 2: โจทย์ที่แท็กกับ LG ที่ไม่มีขั้น Planning (LG05/LG07) ต้อง
+    เริ่ม session ที่ Monitoring ทันที พร้อมข้อความ context"""
 
-    def _assert_starts_at_monitoring_with_context(self, question, expected_lg):
-        with patch.object(main, "ask_grounded_answer", lambda q, c: "mock"):
-            asyncio.run(main.start_algorithm_flow(self.ctx, question))
+    def _assert_starts_at_monitoring_with_context(self, lg_id):
+        main.active_problem_context[self.author.id] = {
+            "id": f"P-{lg_id}", "lg": [lg_id], "situation": "สถานการณ์ทดสอบ",
+        }
+
+        asyncio.run(main.start_algorithm_flow(self.ctx, None))
 
         s = self._session()
-        self.assertIsNotNone(s, f"ควรสร้าง session จากคำถาม: {question}")
-        self.assertEqual(s["lg_id"], expected_lg)
+        self.assertIsNotNone(s, f"ควรสร้าง session จากโจทย์ LG: {lg_id}")
+        self.assertEqual(s["lg_id"], lg_id)
         self.assertEqual(s["phase"], "MONITORING_QP")
-        self.assertNotIn("planning_questions", s)
         self.assertIsNotNone(s["hint_question_id"])
         self.assertEqual(s["main_question_count"], 1)
 
@@ -189,14 +185,10 @@ class NoPlanningStartsAtMonitoringTest(BaseSessionTest):
         )
 
     def test_lg05_starts_at_monitoring_with_context(self):
-        self._assert_starts_at_monitoring_with_context(
-            "ช่วยตรวจสอบ Algorithm ให้หน่อย", "LG05"
-        )
+        self._assert_starts_at_monitoring_with_context("LG05")
 
     def test_lg07_starts_at_monitoring_with_context(self):
-        self._assert_starts_at_monitoring_with_context(
-            "ควรปรับปรุง Algorithm นี้อย่างไร", "LG07"
-        )
+        self._assert_starts_at_monitoring_with_context("LG07")
 
 
 class MainQuestionBudgetTest(BaseSessionTest):

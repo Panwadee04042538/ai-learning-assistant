@@ -95,6 +95,7 @@ class BaseSessionTest(unittest.TestCase):
         self.registry_patch.start()
 
         main.pending_learning_sessions.clear()
+        main.active_problem_context.clear()
 
         self.channel = FakeChannel()
         self.author = FakeAuthor(BaseSessionTest.NEXT_ID)
@@ -199,12 +200,10 @@ class NoPlanningLgDoesNotAskMonitoringTwiceTest(BaseSessionTest):
     """LG05/LG07 ตอบ Monitoring ไปแล้วก่อนส่ง Algorithm ต้องไม่ถูกถามซ้ำ"""
 
     def test_lg05_good_after_initial_monitoring_skips_straight_to_evaluation(self):
-        with patch.object(main, "ask_grounded_answer", lambda q, c: "mock"):
-            asyncio.run(
-                main.start_algorithm_flow(
-                    self.ctx, "ช่วยตรวจสอบ Algorithm ให้หน่อย"
-                )
-            )
+        main.active_problem_context[self.author.id] = {
+            "id": "P-LG05", "lg": ["LG05"], "situation": "สถานการณ์ทดสอบ",
+        }
+        asyncio.run(main.start_algorithm_flow(self.ctx, None))
 
         s = self._session()
         self.assertEqual(s["lg_id"], "LG05")
