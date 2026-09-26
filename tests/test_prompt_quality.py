@@ -16,6 +16,7 @@
     python -m unittest tests.test_prompt_quality -v
 """
 
+import inspect
 import os
 import sys
 import unittest
@@ -98,6 +99,37 @@ class TyphoonGroundedAnswerInstructionsTest(unittest.TestCase):
         text = typhoon_service.GROUNDED_ANSWER_INSTRUCTIONS
         self.assertIn('"คุณ"', text)
         self.assertIn('"นักเรียน"', text)
+
+    def test_caps_explanation_to_3_to_4_sentences(self):
+        self.assertIn("3-4 sentences", typhoon_service.GROUNDED_ANSWER_INSTRUCTIONS)
+
+    def test_forbids_full_step_by_step_walkthrough_before_question(self):
+        text = typhoon_service.GROUNDED_ANSWER_INSTRUCTIONS
+        self.assertIn("Do not walk through the full step-by-step analysis", text)
+        self.assertIn("QP.xlsx", text)
+
+    def test_goal_is_learner_thinking_not_ready_made_answer(self):
+        text = typhoon_service.GROUNDED_ANSWER_INSTRUCTIONS
+        self.assertIn("not to hand them a complete, ready-made analysis", text)
+
+
+class AskGroundedAnswerPromptTest(unittest.TestCase):
+    """typhoon_service.ask_grounded_answer: จุดสร้าง prompt จริงก่อนเรียก Typhoon"""
+
+    def setUp(self):
+        # อ่านซอร์สของฟังก์ชันตรง ๆ เพื่อตรวจข้อความ prompt โดยไม่เรียก API จริง
+        self.source = inspect.getsource(typhoon_service.ask_grounded_answer)
+
+    def test_prompt_limits_explanation_to_3_to_4_sentences(self):
+        self.assertIn("ไม่เกิน 3-4 ประโยค", self.source)
+
+    def test_prompt_forbids_full_analysis_before_qp_question(self):
+        self.assertIn("ห้ามเฉลยหรือเดินตามขั้นตอนการวิเคราะห์ทั้งหมดจนจบก่อน", self.source)
+        self.assertIn("รอให้ระบบถามคำถาม (QP) ต่อจากนี้เอง", self.source)
+
+    def test_prompt_states_goal_is_learner_thinking(self):
+        self.assertIn("ให้ผู้เรียนคิดต่อเอง", self.source)
+        self.assertIn("ไม่ใช่ได้รับคำตอบสำเร็จรูป", self.source)
 
 
 class TyphoonEvaluationInstructionsTest(InstructionTextTestCase):
