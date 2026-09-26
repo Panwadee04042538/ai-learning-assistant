@@ -105,6 +105,11 @@ def format_problem_message(problem):
     """
     จัดรูปแบบโจทย์ให้พร้อมส่งใน Discord (markdown + emoji)
 
+    ไม่แสดงส่วน Process ให้ผู้เรียนเห็น (แม้ข้อมูลนี้จะยังอยู่ใน problem
+    object ตามเดิม เพื่อให้ระบบประเมิน Algorithm ใช้ได้) เพราะ Process
+    คือคำตอบของขั้นตอนที่ผู้เรียนต้องคิดเอง ผู้เรียนเห็นแค่สถานการณ์/
+    Input/Output/โครงสร้าง Algorithm
+
     สำหรับโจทย์รอบ 4 (มี buggy_algorithm) จะแสดง Algorithm
     ที่มีจุดผิดให้ผู้เรียนตรวจสอบด้วย โดยไม่เฉลย bug_type/
     bug_location เพราะผู้เรียนต้องหาจุดผิดด้วยตนเอง
@@ -117,7 +122,6 @@ def format_problem_message(problem):
     title = problem.get("title", "-")
     situation = problem.get("situation", "-")
     input_text = problem.get("input", "-")
-    process_text = problem.get("process", "-")
     output_text = problem.get("output", "-")
     structure = problem.get("structure", "-")
 
@@ -127,8 +131,6 @@ def format_problem_message(problem):
         f"{situation}\n\n"
         "### 📥 Input\n"
         f"{input_text}\n\n"
-        "### ⚙️ Process\n"
-        f"{process_text}\n\n"
         "### 📤 Output\n"
         f"{output_text}\n\n"
         "### 🧩 โครงสร้าง Algorithm\n"

@@ -185,9 +185,19 @@ class ProblemServiceTest(unittest.TestCase):
         self.assertIn("ค่าใช้บริการห้องพิมพ์", message)
         self.assertIn("สถานการณ์ทดสอบ P04", message)
         self.assertIn("จำนวนหน้า, ราคาต่อหน้า", message)
-        self.assertIn("คำนวณค่าบริการและส่วนลด", message)
         self.assertIn("ค่าบริการสุทธิ", message)
         self.assertIn("Decision", message)
+
+    def test_format_problem_message_hides_process(self):
+        # Process ต้องไม่ถูกแสดงให้ผู้เรียนเห็น เพราะเป็นคำตอบของขั้นตอน
+        # ที่ผู้เรียนต้องคิดเอง แต่ต้องยังอยู่ใน problem object เดิม
+        # เพื่อให้ระบบประเมิน Algorithm ใช้ได้
+        problem = get_problem("P04")
+        message = format_problem_message(problem)
+
+        self.assertNotIn("Process", message)
+        self.assertNotIn("คำนวณค่าบริการและส่วนลด", message)
+        self.assertEqual(problem["process"], "คำนวณค่าบริการและส่วนลด")
 
     def test_format_problem_message_round4_shows_buggy_algorithm(self):
         message = format_problem_message(get_problem("P10"))
