@@ -5,8 +5,8 @@
     python -m unittest tests.test_practice_flow -v
 
 ลำดับที่ทดสอบ (โหมดขอโจทย์ฝึก LG08):
-    ขอโจทย์ → Planning QP → ส่ง Algorithm (PARTIAL)
-    → Monitoring QP + คำใบ้ → ส่ง Algorithm (GOOD)
+    ขอโจทย์ → Planning QP (1 ข้อ) → ส่ง Algorithm (PARTIAL)
+    → Monitoring QP (1 ข้อ) + คำใบ้ → ส่ง Algorithm (GOOD)
     → Evaluation QP → จบ Session และบันทึก Log ครบ
 """
 
@@ -131,14 +131,16 @@ class LearningFlowTest(unittest.TestCase):
 
     def test_full_practice_flow(self):
         """
-        LG08 (โหมดฝึก) มี Planning 3 ข้อ (Q36-Q38), Monitoring 2 ข้อ,
-        Evaluation 2 ข้อ ตาม QP.xlsx เส้นทางที่ถูกต้องคือ:
+        LG08 (โหมดฝึก) มี Planning 1 ข้อ (ถามครั้งเดียวต่อ session),
+        Monitoring 1 ข้อ, Evaluation 1 ข้อ ตาม QP.xlsx เส้นทางที่ถูกต้องคือ:
 
-        Planning (ถามทีละข้อ 3 ข้อ) -> Monitoring (1 ข้อ, ถามครั้งเดียว)
+        Planning (1 ข้อ) -> Monitoring (1 ข้อ, ถามครั้งเดียว)
         -> ALGORITHM_ANSWER (PARTIAL + hint เป็น sub-turn, ไม่ถาม Monitoring
         ซ้ำ) -> ALGORITHM_ANSWER (GOOD) -> Evaluation (1 ข้อ) -> จบ Session
 
         รวมเป็น 3 "คำถามหลัก" ต่อ session: Planning / Monitoring / Evaluation
+        แต่ละ transition ต้องส่ง feedback กับคำถาม/ขั้นตอนถัดไปแยกคนละ
+        ข้อความ ไม่ใช่รวมกันในข้อความเดียว
         """
         evaluations = iter([
             {"success": True, "understanding_level": "PARTIAL",
@@ -165,37 +167,45 @@ class LearningFlowTest(unittest.TestCase):
                 s["hint_question_id"],
                 "ยังไม่ถึง Monitoring จึงยังไม่ควรมี hint_question_id",
             )
-            self.assertEqual(len(s["planning_questions"]), 3)
-            self.assertEqual(s["planning_question_index"], 0)
+            self.assertNotIn(
+                "planning_questions", s,
+                "ตัด planning_questions loop ออกแล้ว ไม่ควรมี key นี้อีก",
+            )
             self.assertEqual(s["main_question_count"], 1)
 
             # --------------------------------------------------
-            # Planning: ถามทีละข้อ รอคำตอบก่อนถามข้อถัดไป (3 ข้อ)
+            # Planning: ถามครั้งเดียว แล้วไป Monitoring ทันที
             # --------------------------------------------------
-            self._answer("ต้องรับคะแนนแล้วคำนวณเกรด")      # ตอบ Planning ข้อ 1
-            s = self._session()
-            self.assertEqual(s["phase"], "PLANNING_QP", "ยังต้องถามข้อ 2 ต่อ")
-            self.assertEqual(s["planning_question_index"], 1)
-
-            self._answer("ใช้คะแนนสอบและคะแนนเก็บ")        # ตอบ Planning ข้อ 2
-            s = self._session()
-            self.assertEqual(s["phase"], "PLANNING_QP", "ยังต้องถามข้อ 3 ต่อ")
-            self.assertEqual(s["planning_question_index"], 2)
-
-            self._answer("คำนวณเกรดจากคะแนนรวม")           # ตอบ Planning ข้อ 3 (ข้อสุดท้าย)
+            self._answer("ต้องรับคะแนนแล้วคำนวณเกรด")      # ตอบ Planning ข้อเดียว
             s = self._session()
             self.assertEqual(
                 s["phase"], "MONITORING_QP",
-                "ตอบครบทุกข้อ Planning แล้วต้องไป Monitoring",
+                "Planning มีข้อเดียว ตอบแล้วต้องไป Monitoring ทันที",
             )
             self.assertEqual(s["hint_question_id"], "Q39")
             self.assertEqual(s["main_question_count"], 2)
+
+            # feedback ของ Planning กับคำถาม Monitoring ต้องแยกคนละข้อความ
+            planning_feedback_msg = self.channel.sent[-2]
+            monitoring_question_msg = self.channel.sent[-1]
+            self.assertIn("ข้อความจำลองจาก AI", planning_feedback_msg)
+            self.assertNotIn("🔎", planning_feedback_msg)
+            self.assertIn("🔎", monitoring_question_msg)
+            self.assertNotIn("ข้อความจำลองจาก AI", monitoring_question_msg)
 
             # --------------------------------------------------
             # Monitoring: ถามครั้งเดียว แล้วค่อยให้ลงมือทำ Algorithm
             # --------------------------------------------------
             self._answer("ตรวจสอบทีละขั้นตอน")               # ตอบ Monitoring
-            self.assertEqual(self._session()["phase"], "ALGORITHM_ANSWER")
+            s = self._session()
+            self.assertEqual(s["phase"], "ALGORITHM_ANSWER")
+
+            # feedback ของ Monitoring กับ "ลองทำโจทย์" ต้องแยกคนละข้อความ
+            monitoring_feedback_msg = self.channel.sent[-2]
+            algorithm_prompt_msg = self.channel.sent[-1]
+            self.assertIn("ข้อความจำลองจาก AI", monitoring_feedback_msg)
+            self.assertNotIn("ลองทำโจทย์", monitoring_feedback_msg)
+            self.assertIn("ลองทำโจทย์", algorithm_prompt_msg)
 
             # --------------------------------------------------
             # ALGORITHM_ANSWER: PARTIAL -> hint เป็น sub-turn
@@ -228,7 +238,7 @@ class LearningFlowTest(unittest.TestCase):
         phases = [r["phase"] for r in log.get("metacognitive_responses", [])]
         self.assertEqual(
             phases,
-            ["Planning", "Planning", "Planning", "Monitoring", "Evaluation"],
+            ["Planning", "Monitoring", "Evaluation"],
         )
         self.assertEqual(len(log.get("hints_used", [])), 1)
         self.assertEqual(len(log.get("student_responses", [])), 2)

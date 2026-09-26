@@ -1,8 +1,8 @@
 """
 ทดสอบการจัดลำดับคำถามภายใน session (Session Pacing):
 
-1. ขั้น Planning ต้องถามทีละข้อ รอคำตอบก่อนถามข้อถัดไป
-   (session["planning_question_index"] เดินตามลำดับ)
+1. ขั้น Planning มีคำถามเดียวต่อ session ตอบแล้วไปขั้นถัดไปทันที
+   (feedback กับคำถาม/ขั้นตอนถัดไปต้องแยกคนละข้อความ ไม่รวมกัน)
 2. LG ที่ไม่มีขั้น Planning (LG05/LG07) ต้องเริ่ม session ที่ Monitoring
    ทันที พร้อมข้อความ context อธิบายว่าไม่มีขั้นวางแผน
 3. งบคำถามหลัก 3 ข้อต่อ session (Planning/Monitoring/Evaluation) --
@@ -110,11 +110,12 @@ class BaseSessionTest(unittest.TestCase):
         return main.pending_learning_sessions.get(self.author.id)
 
 
-class PlanningAskedOneAtATimeTest(BaseSessionTest):
-    """งานที่ 1: ขั้น Planning ต้องถามทีละข้อ"""
+class PlanningSingleQuestionTest(BaseSessionTest):
+    """งานที่ 1: ขั้น Planning มีคำถามเดียวต่อ session"""
 
-    def test_lg02_planning_has_three_questions_asked_in_sequence(self):
-        # LG02 มีคำถาม Planning 3 ข้อ (Q04, Q05, Q06) ตาม QP.xlsx
+    def test_lg02_planning_asks_one_question_then_moves_to_monitoring(self):
+        # LG02 มีคำถาม Planning หลายข้อใน QP.xlsx (Q04, Q05, Q06) แต่ session
+        # ต้องถามแค่ข้อแรกแล้วไป Monitoring ทันที ไม่ถามต่อทีละข้อ
         with patch.object(main, "ask_grounded_answer", lambda q, c: "mock"), \
              patch.object(main, "ask_ai", lambda p: "mock feedback"):
 
@@ -125,43 +126,36 @@ class PlanningAskedOneAtATimeTest(BaseSessionTest):
             s = self._session()
             self.assertEqual(s["lg_id"], "LG02")
             self.assertEqual(s["phase"], "PLANNING_QP")
-            self.assertEqual(
-                [q["question_id"] for q in s["planning_questions"]],
-                ["Q04", "Q05", "Q06"],
+            self.assertNotIn(
+                "planning_questions", s,
+                "ตัด planning_questions loop ออกแล้ว ไม่ควรมี key นี้อีก",
             )
-            self.assertEqual(s["planning_question_index"], 0)
             self.assertEqual(s["main_question_count"], 1)
-            first_question_id = s["active_qp"]["question_id"]
+            planning_question_id = s["active_qp"]["question_id"]
+            self.assertTrue(planning_question_id)
 
-            # ตอบข้อ 1 -> ต้องได้ถามข้อ 2 ต่อ (ยังไม่ไป Monitoring)
+            # ตอบคำถาม Planning ข้อเดียว -> ต้องไป Monitoring ทันที
+            # (LG02 มีขั้น Monitoring ตามดีไซน์)
             self._answer("โจทย์ต้องการคำนวณเกรด")
             s = self._session()
-            self.assertEqual(s["phase"], "PLANNING_QP")
-            self.assertEqual(s["planning_question_index"], 1)
-            second_question_id = s["active_qp"]["question_id"]
-            self.assertNotEqual(first_question_id, second_question_id)
-
-            # ตอบข้อ 2 -> ต้องได้ถามข้อ 3 ต่อ
-            self._answer("ใช้ข้อมูลคะแนนสอบ")
-            s = self._session()
-            self.assertEqual(s["phase"], "PLANNING_QP")
-            self.assertEqual(s["planning_question_index"], 2)
-            third_question_id = s["active_qp"]["question_id"]
-            self.assertNotEqual(second_question_id, third_question_id)
-
-            # ตอบข้อ 3 (ข้อสุดท้าย) -> ตอบครบทุกข้อ Planning แล้ว
-            # ต้อง transition ไป Monitoring (LG02 มีขั้น Monitoring)
-            self._answer("ผลลัพธ์คือเกรดของนักเรียน")
-            s = self._session()
-            self.assertEqual(s["phase"], "MONITORING_QP")
+            self.assertEqual(
+                s["phase"], "MONITORING_QP",
+                "Planning มีข้อเดียว ตอบแล้วต้องไป Monitoring ทันที ไม่ถามข้อถัดไป",
+            )
             self.assertEqual(s["main_question_count"], 2)
 
             metacog_phases = [
                 r["phase"] for r in s["qp_responses"]
             ]
-            self.assertEqual(
-                metacog_phases, ["PLANNING_QP", "PLANNING_QP", "PLANNING_QP"]
-            )
+            self.assertEqual(metacog_phases, ["PLANNING_QP"])
+
+            # feedback กับคำถาม Monitoring ต้องแยกคนละข้อความ ไม่รวมกัน
+            feedback_msg = self.channel.sent[-2]
+            question_msg = self.channel.sent[-1]
+            self.assertIn("mock feedback", feedback_msg)
+            self.assertNotIn("🔎", feedback_msg)
+            self.assertIn("🔎", question_msg)
+            self.assertNotIn("mock feedback", question_msg)
 
 
 class NoPlanningStartsAtMonitoringTest(BaseSessionTest):
@@ -176,7 +170,7 @@ class NoPlanningStartsAtMonitoringTest(BaseSessionTest):
         self.assertIsNotNone(s, f"ควรสร้าง session จากคำถาม: {question}")
         self.assertEqual(s["lg_id"], expected_lg)
         self.assertEqual(s["phase"], "MONITORING_QP")
-        self.assertEqual(s["planning_questions"], [])
+        self.assertNotIn("planning_questions", s)
         self.assertIsNotNone(s["hint_question_id"])
         self.assertEqual(s["main_question_count"], 1)
 
@@ -226,8 +220,6 @@ class MainQuestionBudgetTest(BaseSessionTest):
             ],
             "active_qp": None,
             "phase": "ALGORITHM_ANSWER",
-            "planning_questions": [],
-            "planning_question_index": 3,
             "main_question_count": 2,
             "reflection_shown": False,
             "expected_evidence": "",

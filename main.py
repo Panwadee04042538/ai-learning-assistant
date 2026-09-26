@@ -944,25 +944,14 @@ async def handle_qp_response(message, session):
     })
 
     if phase == "PLANNING_QP":
-        planning_questions = session.get("planning_questions", [])
-        next_index = session.get("planning_question_index", 0) + 1
-        session["planning_question_index"] = next_index
+        # ส่ง feedback ของคำถามวางแผนก่อน (Planning มีแค่ 1 คำถามต่อ session)
+        await send_long_message(
+            message.channel,
+            "## 🧠 วางแผนก่อนลงมือ\n\n"
+            f"{qp_feedback}"
+        )
 
-        # ยังมีคำถาม Planning ข้อถัดไป -> ถามทีละข้อ รอคำตอบก่อนค่อยถามต่อ
-        if next_index < len(planning_questions):
-            next_qp = planning_questions[next_index]
-            session["active_qp"] = next_qp
-            await send_long_message(
-                message.channel,
-                "## 🧠 วางแผนก่อนลงมือ\n\n"
-                f"{qp_feedback}\n\n"
-                "### 📝 คำถามวางแผนข้อถัดไป\n\n"
-                f"{next_qp.get('system_question', '-')}"
-            )
-            return
-
-        # ตอบครบทุกข้อของ Planning แล้ว -> ไป Monitoring ก่อนลงมือ
-        # (ถ้า LG นี้มีขั้น Monitoring ตามดีไซน์)
+        # ไป Monitoring ก่อนลงมือ (ถ้า LG นี้มีขั้น Monitoring ตามดีไซน์)
         lg_id = session.get("lg_id")
         monitoring_qp = None
 
@@ -983,27 +972,32 @@ async def handle_qp_response(message, session):
             )
             await send_long_message(
                 message.channel,
-                "## 🧠 วางแผนก่อนลงมือ\n\n"
-                f"{qp_feedback}\n\n"
                 "### 🔎 ก่อนลงมือ ลองตรวจสอบแนวคิดของตัวเองก่อน\n\n"
                 f"{monitoring_qp.get('system_question', '-')}"
             )
             return
 
         session["phase"] = "ALGORITHM_ANSWER"
-        await send_long_message(message.channel,
-            "## 🧠 วางแผนก่อนลงมือ\n\n"
-            f"{qp_feedback}\n\n"
+        await send_long_message(
+            message.channel,
             "### 🚀 ลองทำโจทย์\n\n"
             f"{session.get('algorithm_question', '-')}\n\n"
-            "ส่ง Algorithm ของคุณมาได้เลย")
+            "ส่ง Algorithm ของคุณมาได้เลย"
+        )
         return
 
     if phase == "MONITORING_QP":
         session["phase"] = "ALGORITHM_ANSWER"
-        text = "## 🔎 ก่อนลงมือ\n\n" + f"{qp_feedback}\n\n"
-        text += "### ✏️ ลองทำโจทย์\n\n" + f"{session.get('algorithm_question', '-')}"
-        await send_long_message(message.channel, text)
+        await send_long_message(
+            message.channel,
+            "## 🔎 ก่อนลงมือ\n\n"
+            f"{qp_feedback}"
+        )
+        await send_long_message(
+            message.channel,
+            "### ✏️ ลองทำโจทย์\n\n"
+            f"{session.get('algorithm_question', '-')}"
+        )
         return
 
     if phase == "EVALUATION_QP":
@@ -1476,9 +1470,7 @@ async def start_algorithm_flow(ctx, question=None):
                 f"`{type(e).__name__}: {e}`"
             )
 
-        # Planning ของ LG08 มีหลายข้อ -> เตรียมรายการไว้ถามทีละข้อ
-        planning_questions = get_qp_by_lg_phase("LG08", "Planning") or []
-        planning_qp = planning_questions[0] if planning_questions else None
+        planning_qp = get_session_qp("LG08", "Planning")
 
         planning_text = (
             "\n\n### 🧠 วางแผนก่อนลงมือ\n\n"
@@ -1535,8 +1527,6 @@ async def start_algorithm_flow(ctx, question=None):
             "qp_responses": [],
             "active_qp": planning_qp,
             "phase": "PLANNING_QP" if planning_qp else "ALGORITHM_ANSWER",
-            "planning_questions": planning_questions,
-            "planning_question_index": 0,
             "main_question_count": 1,
             "reflection_shown": False,
             "expected_evidence": "",
@@ -1917,11 +1907,6 @@ Learning Goal:
     # ==========================================
     active_qp = learning_question
 
-    # Planning ของ LG นี้อาจมีหลายข้อ -> เตรียมรายการไว้ถามทีละข้อ
-    planning_questions = []
-    if session_phase == "Planning":
-        planning_questions = get_qp_by_lg_phase(goal_id, "Planning") or []
-
     # ถ้า session เริ่มที่ Monitoring ทันที (เช่น LG05/LG07 ที่ไม่มี Planning)
     # ให้ผูก hint_question_id กับคำถาม Monitoring ข้อนี้ไว้เลย
     hint_question_id = (
@@ -1947,8 +1932,6 @@ Learning Goal:
         "qp_responses": [],
         "active_qp": active_qp,
         "phase": PHASE_TO_SESSION_KEY.get(session_phase, "EVALUATION_QP"),
-        "planning_questions": planning_questions,
-        "planning_question_index": 0,
         "main_question_count": 1,
         "reflection_shown": False,
         "session_id": log_entry.get("session_id") if log_entry else None
