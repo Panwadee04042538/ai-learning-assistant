@@ -1598,14 +1598,11 @@ async def start_algorithm_flow(ctx, question=None):
     if not question or not question.strip():
 
         await ctx.send(
-
-            "⚠️ กรุณาระบุข้อความสำหรับทดสอบ\n\n"
-
-            "ตัวอย่าง:\n"
-
-            "`!alg Algorithm คืออะไร`\n"
-            "`!alg อินพุตคืออะไร`\n"
-            "`!alg รูปแบบวนซ้ำคืออะไร`"
+            "💡 ลองถามแบบนี้ได้เลย\n\n"
+            "!alg ทำไมต้องวิเคราะห์โจทย์ก่อนเขียน Algorithm?\n"
+            "!alg loop กับ if ต่างกันยังไง?\n"
+            "!alg จะรู้ได้ยังไงว่าโจทย์นี้ต้องใช้การวนซ้ำ?\n"
+            "!alg ขั้นตอนแรกของการออกแบบ Algorithm คืออะไร?"
         )
 
         return
