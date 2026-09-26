@@ -224,7 +224,6 @@ class BuildQpFeedbackPromptTest(unittest.TestCase):
 
     def test_forbids_stating_missing_step_directly(self):
         self.assertIn("ห้ามชี้หรือเฉลยจุดที่ควรตรวจสอบโดยตรง", self.text)
-        self.assertIn("ถามคำถามชี้นำ", self.text)
 
     def test_skips_praise_when_nothing_genuine(self):
         self.assertIn("ถ้าไม่มีจุดที่ทำได้ดีจริง ให้ข้ามส่วนนี้ไปเลย", self.text)
@@ -239,12 +238,18 @@ class BuildQpFeedbackPromptTest(unittest.TestCase):
         self.assertIn("QP.xlsx", self.text)
         self.assertIn("ห้ามสร้างคำถาม Metacognition ใหม่", self.text)
 
-    def test_limits_to_at_most_one_question(self):
-        self.assertIn("ถามได้ 1 ข้อเท่านั้น", self.text)
-        self.assertIn("ห้ามถามมากกว่า 1 ข้อ", self.text)
+    def test_forbids_any_question_in_feedback(self):
+        self.assertIn("ห้ามสร้างคำถามใด ๆ ในข้อความ feedback โดยเด็ดขาด", self.text)
+        self.assertIn("ห้ามลงท้ายด้วยคำถาม", self.text)
 
-    def test_guiding_question_must_be_the_final_sentence(self):
-        self.assertIn("ประโยคสุดท้ายเพียงประโยคเดียว", self.text)
+    def test_forbids_question_mark(self):
+        self.assertIn('ห้ามใช้เครื่องหมาย "?"', self.text)
+
+    def test_feedback_must_be_statements_only(self):
+        self.assertIn("ประโยคบอกเล่า", self.text)
+
+    def test_system_sends_next_question_separately(self):
+        self.assertIn("ระบบจะส่งคำถามขั้นถัดไปเองใน", self.text)
 
     def test_feedback_capped_at_three_sentences(self):
         self.assertIn("ไม่เกิน 3 ประโยค", self.text)
