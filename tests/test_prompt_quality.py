@@ -289,10 +289,18 @@ class Lg01WarmupWrapupPromptTest(unittest.TestCase):
         self.assertIn('"คุณ"', text)
         self.assertIn('"นักเรียน"', text)
         self.assertIn("ห้ามเฉลยตรง ๆ", text)
-        self.assertIn("ถามคำถามชี้นำ", text)
         self.assertIn("ห้ามชมลอย ๆ", text)
         self.assertIn("QP.xlsx", text)
         self.assertIn("ไม่เกิน 3 ประโยค", text)
+
+    def test_warmup_feedback_prompt_forbids_ending_with_a_question(self):
+        text = main.build_lg01_warmup_feedback_prompt(
+            self.qp, "เป็นลำดับขั้นตอนการแก้ปัญหา"
+        )
+        self.assertIn("ไม่ใช่การถามต่อ", text)
+        self.assertIn("ห้ามลงท้ายด้วยคำถามใด ๆ ทั้งสิ้น", text)
+        self.assertIn('ห้ามใช้เครื่องหมาย "?"', text)
+        self.assertIn("ประโยคบอกเล่า", text)
 
     def test_wrapup_summary_prompt_speaking_principles(self):
         text = main.build_lg01_wrapup_summary_prompt(
@@ -303,6 +311,15 @@ class Lg01WarmupWrapupPromptTest(unittest.TestCase):
         self.assertIn("ห้ามชมลอย ๆ", text)
         self.assertIn("QP.xlsx", text)
         self.assertIn("ไม่เกิน 3 ประโยค", text)
+
+    def test_wrapup_summary_prompt_forbids_ending_with_a_question(self):
+        text = main.build_lg01_wrapup_summary_prompt(
+            self.qp, "วันนี้เข้าใจเรื่อง Algorithm มากขึ้น"
+        )
+        self.assertIn("การสรุปปิดคาบ ไม่ใช่การถามต่อ", text)
+        self.assertIn("ห้ามลงท้ายด้วยคำถามใด ๆ ทั้งสิ้น", text)
+        self.assertIn('ห้ามใช้เครื่องหมาย "?"', text)
+        self.assertIn("ประโยคบอกเล่า", text)
 
 
 class Lg01WarmupIntroTest(unittest.TestCase):

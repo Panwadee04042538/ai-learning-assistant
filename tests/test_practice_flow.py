@@ -200,6 +200,8 @@ class LearningFlowTest(unittest.TestCase):
             self.assertIn("ข้อความจำลองจาก AI", planning_feedback_msg)
             self.assertNotIn("ลองทำโจทย์", planning_feedback_msg)
             self.assertIn("ลองทำโจทย์", algorithm_prompt_msg)
+            self.assertIn("ใส่หมายเลขข้อให้ครบทุกขั้นตอน", algorithm_prompt_msg)
+            self.assertIn("1. เริ่มต้น", algorithm_prompt_msg)
 
             # --------------------------------------------------
             # ALGORITHM_ANSWER: PARTIAL -> hint เป็น sub-turn
