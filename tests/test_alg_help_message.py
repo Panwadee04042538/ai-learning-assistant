@@ -90,10 +90,10 @@ class AlgHelpMessageTest(unittest.TestCase):
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     EXPECTED_EXAMPLES = [
-        "!alg ทำไมต้องวิเคราะห์โจทย์ก่อนเขียน Algorithm?",
+        "!alg ทำไมต้องวิเคราะห์โจทย์ก่อนเขียนอัลกอริทึม?",
         "!alg loop กับ if ต่างกันยังไง?",
         "!alg จะรู้ได้ยังไงว่าโจทย์นี้ต้องใช้การวนซ้ำ?",
-        "!alg ขั้นตอนแรกของการออกแบบ Algorithm คืออะไร?",
+        "!alg ขั้นตอนแรกของการออกแบบอัลกอริทึมคืออะไร?",
     ]
 
     def test_alg_with_no_question_shows_usage_examples(self):
