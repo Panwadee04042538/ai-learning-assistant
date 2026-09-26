@@ -203,6 +203,24 @@ class BuildEvaluationPromptTest(InstructionTextTestCase):
     def test_forbids_free_form_metacognitive_question(self):
         self.assert_forbids_free_form_metacognition(self.text)
 
+    def test_clarifies_this_is_algorithm_evaluation_not_planning_qp(self):
+        self.assertIn("นี่คือขั้นประเมิน Algorithm ไม่ใช่ Planning QP", self.text)
+        self.assertIn("คำถามวางแผน (Planning QP)", self.text)
+        self.assertIn("โจทย์ต้องการให้แก้ปัญหาอะไร", self.text)
+
+    def test_forbids_using_planning_qp_as_evaluation_criteria(self):
+        self.assertIn("ห้ามนำคำถาม Planning QP มาใช้เป็นเกณฑ์ประเมิน", self.text)
+
+    def test_evaluates_only_algorithm_correctness(self):
+        self.assertIn(
+            "ให้ประเมินเฉพาะความถูกต้องและความสมบูรณ์ของ Algorithm", self.text
+        )
+
+    def test_current_question_labeled_as_algorithm_goal_not_qp_to_answer(self):
+        self.assertIn(
+            "นี่คือเป้าหมายของ Algorithm ที่ต้องประเมิน", self.text
+        )
+
 
 class BuildQpFeedbackPromptTest(unittest.TestCase):
     """main.build_qp_feedback_prompt (feedback ของคำตอบ QP metacognition)"""
