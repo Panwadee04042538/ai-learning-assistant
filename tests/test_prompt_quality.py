@@ -207,6 +207,16 @@ class BuildQpFeedbackPromptTest(unittest.TestCase):
         self.assertIn("QP.xlsx", self.text)
         self.assertIn("ห้ามสร้างคำถาม Metacognition ใหม่", self.text)
 
+    def test_limits_to_at_most_one_question(self):
+        self.assertIn("ถามได้ 1 ข้อเท่านั้น", self.text)
+        self.assertIn("ห้ามถามมากกว่า 1 ข้อ", self.text)
+
+    def test_guiding_question_must_be_the_final_sentence(self):
+        self.assertIn("ประโยคสุดท้ายเพียงประโยคเดียว", self.text)
+
+    def test_feedback_capped_at_three_sentences(self):
+        self.assertIn("ไม่เกิน 3 ประโยค", self.text)
+
 
 class Lg01WarmupWrapupPromptTest(unittest.TestCase):
     """main.build_lg01_warmup_feedback_prompt / build_lg01_wrapup_summary_prompt"""
