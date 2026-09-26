@@ -143,13 +143,13 @@ INTENT_PATTERNS = {
 
     # LG06: เลือกรูปแบบ/โครงสร้าง
     "LG06": [
-        r"ควรใช้.*(if|loop|sequence|selection|เงื่อนไข|ทำซ้ำ|วนซ้ำ)",
-        r"ต้องใช้.*(if|loop|sequence|selection|เงื่อนไข|ทำซ้ำ|วนซ้ำ)",
+        r"ควรใช้.*(if|loop|sequence|selection|decision|เงื่อนไข|ทำซ้ำ|วนซ้ำ)",
+        r"ต้องใช้.*(if|loop|sequence|selection|decision|เงื่อนไข|ทำซ้ำ|วนซ้ำ)",
         r"เลือก.*แบบไหน",
         r"เลือก.*อะไร",
         r"ใช้.*หรือ",
-        r"ควรใช้.*(if|loop|sequence|selection|เงื่อนไข|ทำซ้ำ|วนซ้ำ)",
-        r"ต้องใช้.*(if|loop|sequence|selection|เงื่อนไข|ทำซ้ำ|วนซ้ำ)",
+        r"ควรใช้.*(if|loop|sequence|selection|decision|เงื่อนไข|ทำซ้ำ|วนซ้ำ)",
+        r"ต้องใช้.*(if|loop|sequence|selection|decision|เงื่อนไข|ทำซ้ำ|วนซ้ำ)",
         r"เลือกโครงสร้าง",
         r"โครงสร้าง.*อะไร",
         r"โครงสร้าง.*ไหน",
@@ -157,6 +157,7 @@ INTENT_PATTERNS = {
         r"\bloop\b",
         r"\bsequence\b",
         r"selection",
+        r"\bdecision\b",
         r"ทำซ้ำ",
         r"เงื่อนไข",
         r"วนซ้ำ",
@@ -188,7 +189,9 @@ INTENT_PATTERNS = {
         r"ให้ลอง",
         r"ช่วยคิด",
         r"ทำให้ดู",
-        r"ยกตัวอย่าง"
+        r"ยกตัวอย่าง",
+        r"ออกแบบ.*สถานการณ์",
+        r"จากสถานการณ์"
     ]
 }
 
