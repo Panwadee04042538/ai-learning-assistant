@@ -7,9 +7,6 @@
 #   DEBUG_MODE = False
 #   GEMINI_API_KEY = <secret>   (ถ้าใช้ gemini_service.py)
 
-[build]
-builder = "RAILPACK"
-
 [deploy]
 # service เดียว: dashboard (background) + Discord bot (foreground) ดู start.sh
 startCommand = "sh start.sh"
