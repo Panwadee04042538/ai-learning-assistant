@@ -13,11 +13,9 @@
 
 1. ตรวจว่า `.gitignore` กันไฟล์ข้อมูลและ secret ไว้แล้ว
    (`learning_logs.json`, `data/*.json` ที่เป็นข้อมูลผู้เรียน, `*.db`, `.env`)
-2. `.env` ถูกลบออกจากประวัติ git ทั้งหมดแล้ว (`git filter-repo`) และถอด `.env`,
-   `learning_logs.json`, `database/learning.db` ออกจาก index แล้ว
-   หมายเหตุ: `learning_logs.json` และ `database/learning.db` ยังอยู่ใน commit เก่า
-   (มีข้อมูลผู้เรียน) ถ้าจะ push ขึ้น repo สาธารณะ ให้ลบออกจากประวัติด้วยวิธีเดียวกัน
-   ถ้าเคยแชร์ `.env` ไปทางอื่น (zip/backup) ให้เปลี่ยน token/API key ทั้งหมด
+2. `.env`, `learning_logs.json` และ `database/learning.db` ถูกลบออกจากประวัติ git
+   ทั้งหมดแล้ว (`git filter-repo`) และไม่ถูก track อีก (อยู่ใน `.gitignore`)
+   ถ้าเคยแชร์ไฟล์เหล่านี้ไปทางอื่น (zip/backup) ให้เปลี่ยน token/API key ทั้งหมด
 3. Push ขึ้น GitHub แล้วสร้าง Project ใน Railway → *Deploy from GitHub repo*
 
 ## 2. Mount Volume
