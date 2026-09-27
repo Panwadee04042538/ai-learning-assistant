@@ -231,30 +231,12 @@ class ProblemCommandTest(unittest.TestCase):
         )
         self.bank_patch.start()
 
-        self.registry_path = os.path.join(
-            self.tmpdir, "student_registry.json"
-        )
-        self.registry_patch = patch.object(
-            registry_service, "REGISTRY_PATH", self.registry_path
-        )
-        self.registry_patch.start()
-
-        self.problem_log_path = os.path.join(
-            self.tmpdir, "problem_logs.json"
-        )
-        self.problem_log_patch = patch.object(
-            logger, "PROBLEM_LOG_PATH", self.problem_log_path
-        )
-        self.problem_log_patch.start()
-
         self.channel = FakeChannel()
         self.author = FakeAuthor(7001)
         self.ctx = FakeCtx(self.channel, self.author)
 
     def tearDown(self):
         self.bank_patch.stop()
-        self.registry_patch.stop()
-        self.problem_log_patch.stop()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def _problem(self, problem_id):
@@ -264,7 +246,7 @@ class ProblemCommandTest(unittest.TestCase):
         self._problem("P01")
 
         self.assertIn("ลงทะเบียนก่อนใช้งาน", self.channel.sent[-1])
-        self.assertFalse(os.path.exists(self.problem_log_path))
+        self.assertEqual(logger.load_problem_logs(), [])
 
     def test_problem_unknown_id_shows_error_with_range_hint(self):
         register_student(self.author.id, "S-7001")
@@ -273,7 +255,7 @@ class ProblemCommandTest(unittest.TestCase):
 
         self.assertIn("ไม่พบโจทย์", self.channel.sent[-1])
         self.assertIn("P01-P15", self.channel.sent[-1])
-        self.assertFalse(os.path.exists(self.problem_log_path))
+        self.assertEqual(logger.load_problem_logs(), [])
 
     def test_problem_valid_id_sends_message_and_logs(self):
         register_student(self.author.id, "S-7001")
@@ -282,8 +264,7 @@ class ProblemCommandTest(unittest.TestCase):
 
         self.assertIn("ชุดของขวัญปฐมนิเทศ", self.channel.sent[-1])
 
-        with open(self.problem_log_path, encoding="utf-8") as file:
-            logs = json.load(file)
+        logs = logger.load_problem_logs()
 
         self.assertEqual(len(logs), 1)
         self.assertEqual(logs[0]["problem_id"], "P01")
@@ -297,7 +278,7 @@ class ProblemCommandTest(unittest.TestCase):
         self._problem(None)
 
         self.assertIn("ระบุรหัสโจทย์", self.channel.sent[-1])
-        self.assertFalse(os.path.exists(self.problem_log_path))
+        self.assertEqual(logger.load_problem_logs(), [])
 
 
 if __name__ == "__main__":

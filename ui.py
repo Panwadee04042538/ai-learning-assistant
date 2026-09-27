@@ -17,7 +17,7 @@ class TopicSelect(discord.ui.Select):
         options = [
 
             discord.SelectOption(
-                label="Algorithm",
+                label="อัลกอริทึม (Algorithm)",
                 value="algorithm",
                 emoji="🧠"
             ),

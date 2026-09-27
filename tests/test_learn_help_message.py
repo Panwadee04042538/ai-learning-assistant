@@ -69,18 +69,6 @@ class LearnHelpMessageTest(unittest.TestCase):
 
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
-        self.log_path = os.path.join(self.tmpdir, "learning_logs.json")
-        self.log_patch = patch.object(logger, "LOG_PATH", self.log_path)
-        self.log_patch.start()
-
-        self.registry_path = os.path.join(
-            self.tmpdir, "student_registry.json"
-        )
-        self.registry_patch = patch.object(
-            registry_service, "REGISTRY_PATH", self.registry_path
-        )
-        self.registry_patch.start()
-
         main.pending_learning_sessions.clear()
 
         self.channel = FakeChannel()
@@ -89,8 +77,6 @@ class LearnHelpMessageTest(unittest.TestCase):
         registry_service.register_student(self.author.id, "S-7801")
 
     def tearDown(self):
-        self.log_patch.stop()
-        self.registry_patch.stop()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     EXPECTED_EXAMPLES = [
@@ -128,7 +114,7 @@ class LearnHelpMessageTest(unittest.TestCase):
     def test_unregistered_learner_still_sees_registration_gate_first(self):
         # registration ถูกเช็คก่อนทุก entry point ของ !learn (ตามดีไซน์เดิม)
         # แม้เป็นแค่การขอดู usage help ก็ยังต้องลงทะเบียนก่อน
-        os.remove(self.registry_path)
+        registry_service._save_registry({})
 
         asyncio.run(main.start_learn_flow(self.ctx, None))
 

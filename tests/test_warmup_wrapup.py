@@ -75,18 +75,6 @@ class WarmupWrapupTest(unittest.TestCase):
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
 
-        self.log_path = os.path.join(self.tmpdir, "learning_logs.json")
-        self.log_patch = patch.object(logger, "LOG_PATH", self.log_path)
-        self.log_patch.start()
-
-        self.registry_path = os.path.join(
-            self.tmpdir, "student_registry.json"
-        )
-        self.registry_patch = patch.object(
-            registry_service, "REGISTRY_PATH", self.registry_path
-        )
-        self.registry_patch.start()
-
         main.pending_learning_sessions.clear()
         main.lg01_opening_history.clear()
 
@@ -97,8 +85,6 @@ class WarmupWrapupTest(unittest.TestCase):
         registry_service.register_student(self.author.id, "S-8801")
 
     def tearDown(self):
-        self.log_patch.stop()
-        self.registry_patch.stop()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def _warmup(self):
@@ -120,7 +106,7 @@ class WarmupWrapupTest(unittest.TestCase):
 
     def test_warmup_blocked_when_not_registered(self):
         # ล้าง registry เพื่อทดสอบผู้เรียนที่ยังไม่ลงทะเบียน
-        os.remove(self.registry_path)
+        registry_service._save_registry({})
 
         self._warmup()
 
@@ -128,7 +114,7 @@ class WarmupWrapupTest(unittest.TestCase):
         self.assertIsNone(self._session())
 
     def test_wrapup_blocked_when_not_registered(self):
-        os.remove(self.registry_path)
+        registry_service._save_registry({})
 
         self._wrapup()
 
@@ -143,7 +129,7 @@ class WarmupWrapupTest(unittest.TestCase):
         self._warmup()
 
         sent = self.channel.sent[-1]
-        intro_pos = sent.find("Algorithm คือ")
+        intro_pos = sent.find("อัลกอริทึม (Algorithm) คือ")
         question_pos = sent.find(
             self._session()["active_qp"]["system_question"]
         )
@@ -167,8 +153,7 @@ class WarmupWrapupTest(unittest.TestCase):
     def test_warmup_logs_start(self):
         self._warmup()
 
-        with open(self.log_path, encoding="utf-8") as f:
-            logs = json.load(f)
+        logs = logger.load_logs()
 
         self.assertEqual(len(logs), 1)
         self.assertEqual(logs[0]["learning_goal"]["lg_id"], "LG01")
@@ -187,8 +172,7 @@ class WarmupWrapupTest(unittest.TestCase):
         self.assertIn("สะท้อนคำตอบแบบสั้น ๆ", joined)
         self.assertIn("เริ่มคาบเรียน", joined)
 
-        with open(self.log_path, encoding="utf-8") as f:
-            logs = json.load(f)
+        logs = logger.load_logs()
         self.assertEqual(logs[0]["final_status"], "COMPLETED")
 
     # --------------------------------------------------
@@ -224,8 +208,7 @@ class WarmupWrapupTest(unittest.TestCase):
     def test_wrapup_logs_start(self):
         self._wrapup()
 
-        with open(self.log_path, encoding="utf-8") as f:
-            logs = json.load(f)
+        logs = logger.load_logs()
 
         self.assertEqual(len(logs), 1)
         self.assertEqual(logs[0]["learning_goal"]["lg_id"], "LG01")
@@ -244,8 +227,7 @@ class WarmupWrapupTest(unittest.TestCase):
         self.assertIn("สรุปสิ่งที่เรียนรู้แบบสั้น ๆ", joined)
         self.assertIn("สรุปการเรียนรู้", joined)
 
-        with open(self.log_path, encoding="utf-8") as f:
-            logs = json.load(f)
+        logs = logger.load_logs()
         self.assertEqual(logs[0]["final_status"], "COMPLETED")
 
 

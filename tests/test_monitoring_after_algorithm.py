@@ -82,18 +82,6 @@ class BaseSessionTest(unittest.TestCase):
 
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
-        self.log_path = os.path.join(self.tmpdir, "learning_logs.json")
-        self.log_patch = patch.object(logger, "LOG_PATH", self.log_path)
-        self.log_patch.start()
-
-        self.registry_path = os.path.join(
-            self.tmpdir, "student_registry.json"
-        )
-        self.registry_patch = patch.object(
-            registry_service, "REGISTRY_PATH", self.registry_path
-        )
-        self.registry_patch.start()
-
         main.pending_learning_sessions.clear()
         main.active_problem_context.clear()
 
@@ -104,8 +92,6 @@ class BaseSessionTest(unittest.TestCase):
         registry_service.register_student(self.author.id, "S-9501")
 
     def tearDown(self):
-        self.log_patch.stop()
-        self.registry_patch.stop()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def _answer(self, text):
@@ -190,9 +176,7 @@ class MaxAttemptsReachedGoesToMonitoringTest(BaseSessionTest):
         self._answer("แก้ปัญหาได้บางส่วน")
         self.assertIsNone(self._session())
 
-        with open(self.log_path, encoding="utf-8") as f:
-            import json
-            logs = json.load(f)
+        logs = logger.load_logs()
         self.assertEqual(logs[0]["final_status"], "MAX_ATTEMPTS_REACHED")
 
 

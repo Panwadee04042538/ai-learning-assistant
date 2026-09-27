@@ -2,9 +2,8 @@
 ทดสอบโหมด DEBUG (config.DEBUG_MODE):
 
 ข้อความที่ส่งไป Discord จากคำสั่ง !learn / start_learn_flow ต้องไม่มี
-ข้อมูล debug (Matched Term, Match Type, Score, ✅ Test Case Mapping
-Success) เมื่อ DEBUG_MODE = False และต้องมีข้อมูลเหล่านี้เมื่อ
-DEBUG_MODE = True
+ข้อมูล debug (Matched Term, Match Type, Score) เมื่อ DEBUG_MODE = False
+และต้องมีข้อมูลเหล่านี้เมื่อ DEBUG_MODE = True
 
 วิธีรัน (จากโฟลเดอร์หลักของโปรเจกต์):
     python -m unittest tests.test_debug_mode -v
@@ -70,7 +69,6 @@ DEBUG_MARKERS = [
     "Matched Term",
     "Match Type",
     "**Score:**",
-    "Test Case Mapping Success",
 ]
 
 
@@ -78,18 +76,6 @@ class DebugModeMessageTest(unittest.TestCase):
 
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
-
-        self.log_path = os.path.join(self.tmpdir, "learning_logs.json")
-        self.log_patch = patch.object(logger, "LOG_PATH", self.log_path)
-        self.log_patch.start()
-
-        self.registry_path = os.path.join(
-            self.tmpdir, "student_registry.json"
-        )
-        self.registry_patch = patch.object(
-            registry_service, "REGISTRY_PATH", self.registry_path
-        )
-        self.registry_patch.start()
 
         main.pending_learning_sessions.clear()
 
@@ -100,13 +86,13 @@ class DebugModeMessageTest(unittest.TestCase):
         registry_service.register_student(self.author.id, "S-8001")
 
     def tearDown(self):
-        self.log_patch.stop()
-        self.registry_patch.stop()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def _ask(self, question):
         with patch.object(
             main, "ask_grounded_answer", lambda q, c: "คำอธิบายจำลอง"
+        ), patch.object(
+            main, "ask_reflection", lambda p: "คำถามสะท้อนคิดจำลอง"
         ):
             asyncio.run(main.start_learn_flow(self.ctx, question))
 
@@ -134,6 +120,61 @@ class DebugModeMessageTest(unittest.TestCase):
 
     def test_default_debug_mode_is_off(self):
         self.assertFalse(main.DEBUG_MODE)
+
+    def test_knowledge_unit_reference_block_never_shown(self):
+        """
+        ข้อความ "อ้างอิงเนื้อหาจาก Knowledge Unit" เป็นข้อความซ้ำซ้อนกับ
+        ส่วน KU/หัวข้อที่เคยแสดงไว้ด้านบน และไม่ควรแสดงให้ผู้เรียนเห็น
+        ไม่ว่า DEBUG_MODE จะเปิดหรือปิดก็ตาม
+        """
+        for debug_mode in (False, True):
+            main.pending_learning_sessions.clear()
+            self.channel.sent.clear()
+
+            with patch.object(main, "DEBUG_MODE", debug_mode):
+                self._ask("Algorithm คืออะไร")
+
+            joined = "\n".join(self.channel.sent)
+            self.assertNotIn("อ้างอิงเนื้อหาจาก Knowledge Unit", joined)
+
+    def test_test_case_mapping_success_never_shown(self):
+        """
+        "Test Case Mapping Success" เป็นข้อความทดสอบภายในที่ไม่มีประโยชน์
+        กับผู้เรียน จึงถูกลบออกทั้งหมด ไม่ใช่แค่ห่อด้วย DEBUG_MODE
+        """
+        for debug_mode in (False, True):
+            main.pending_learning_sessions.clear()
+            self.channel.sent.clear()
+
+            with patch.object(main, "DEBUG_MODE", debug_mode):
+                self._ask("Algorithm คืออะไร")
+
+            joined = "\n".join(self.channel.sent)
+            self.assertNotIn("Test Case Mapping Success", joined)
+
+    def test_knowledge_retrieved_section_never_shown(self):
+        """
+        เด็กไม่จำเป็นต้องรู้ว่าระบบดึง KU อะไรมา (matching/retrieval เป็น
+        กลไกภายใน) จึงต้องไม่มี section "Knowledge Retrieved" (KU id,
+        หัวข้อ, Related LG) ในข้อความที่ส่งไป Discord เลย ไม่ว่า DEBUG_MODE
+        จะเปิดหรือปิดก็ตาม
+        """
+        for debug_mode in (False, True):
+            main.pending_learning_sessions.clear()
+            self.channel.sent.clear()
+
+            # ใช้คำถามที่ map ไป KU ที่มี related_lg (KU11 -> LG04, LG06)
+            # เพื่อให้ครอบคลุมทั้ง KU id, หัวข้อ และ Related LG
+            with patch.object(main, "DEBUG_MODE", debug_mode):
+                self._ask("loop คืออะไร")
+
+            joined = "\n".join(self.channel.sent)
+            self.assertNotIn("Knowledge Retrieved", joined)
+            self.assertNotIn("หัวข้อ:", joined)
+            self.assertNotIn("Related LG", joined)
+
+            # เนื้อหาที่ผู้เรียนควรเห็นจริงยังต้องอยู่ครบ
+            self.assertIn("Learning Goal Detected", joined)
 
 
 if __name__ == "__main__":

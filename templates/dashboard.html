@@ -1023,6 +1023,54 @@
 
 
     <!-- =====================================
+         Top !learn Questions
+    ====================================== -->
+
+    <div class="section-title">
+        ❓ หัวข้อที่เด็กถามบ่อย (!learn)
+    </div>
+
+
+    <div class="panel">
+
+        {% if top_learn_questions %}
+
+            <ul class="stat-list">
+
+                {% for item in top_learn_questions %}
+
+                    <li>
+
+                        <div class="stat-name">
+
+                            <span class="stat-title">
+                                {{ item.question }}
+                            </span>
+
+                        </div>
+
+                        <span class="stat-count">
+                            {{ item.count }} ครั้ง
+                        </span>
+
+                    </li>
+
+                {% endfor %}
+
+            </ul>
+
+        {% else %}
+
+            <div class="empty">
+                ยังไม่มีข้อมูลคำถามจาก !learn
+            </div>
+
+        {% endif %}
+
+    </div>
+
+
+    <!-- =====================================
          Recent Learning Sessions
     ====================================== -->
 

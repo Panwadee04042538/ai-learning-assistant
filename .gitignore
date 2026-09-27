@@ -2,3 +2,11 @@
 _fixed_reference/
 
 _fixed_reference/
+
+# Runtime data / secrets (ข้อมูลผู้เรียนและ key ห้ามขึ้น git)
+learning_logs.json
+data/problem_logs.json
+data/student_registry.json
+data/learning_assistant.db
+database/learning.db
+.env

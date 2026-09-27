@@ -104,18 +104,6 @@ class AlgGroundedAnswerGatingTest(unittest.TestCase):
 
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
-        self.log_path = os.path.join(self.tmpdir, "learning_logs.json")
-        self.log_patch = patch.object(logger, "LOG_PATH", self.log_path)
-        self.log_patch.start()
-
-        self.registry_path = os.path.join(
-            self.tmpdir, "student_registry.json"
-        )
-        self.registry_patch = patch.object(
-            registry_service, "REGISTRY_PATH", self.registry_path
-        )
-        self.registry_patch.start()
-
         main.pending_learning_sessions.clear()
 
         self.channel = FakeChannel()
@@ -124,13 +112,13 @@ class AlgGroundedAnswerGatingTest(unittest.TestCase):
         registry_service.register_student(self.author.id, "S-7701")
 
     def tearDown(self):
-        self.log_patch.stop()
-        self.registry_patch.stop()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def _ask(self, question):
         mock_grounded = MagicMock(return_value="คำอธิบายจำลอง")
-        with patch.object(main, "ask_grounded_answer", mock_grounded):
+        mock_reflection = MagicMock(return_value="คำถามสะท้อนคิดจำลอง")
+        with patch.object(main, "ask_grounded_answer", mock_grounded), \
+             patch.object(main, "ask_reflection", mock_reflection):
             asyncio.run(main.start_learn_flow(self.ctx, question))
         return mock_grounded
 
@@ -139,9 +127,10 @@ class AlgGroundedAnswerGatingTest(unittest.TestCase):
 
         mock_grounded.assert_called_once()
         joined = "\n".join(self.channel.sent)
-        self.assertIn("คำอธิบายจาก AI", joined)
         self.assertIn("คำอธิบายจำลอง", joined)
-        # ต้องยังไปต่อที่ QP ตามปกติด้วย ไม่ใช่หยุดแค่ grounded answer
+        # ต้องไม่มี header "คำอธิบายจาก AI" กำกับไว้ตรง ๆ อีกต่อไป
+        self.assertNotIn("คำอธิบายจาก AI", joined)
+        # ต้องยังไปต่อที่คำถามสะท้อนคิดตามปกติด้วย ไม่ใช่หยุดแค่ grounded answer
         self.assertIsNotNone(main.pending_learning_sessions.get(self.author.id))
 
     def test_usage_question_still_calls_grounded_answer(self):
@@ -149,7 +138,7 @@ class AlgGroundedAnswerGatingTest(unittest.TestCase):
 
         mock_grounded.assert_called_once()
         joined = "\n".join(self.channel.sent)
-        self.assertIn("คำอธิบายจาก AI", joined)
+        self.assertIn("คำอธิบายจำลอง", joined)
 
     def test_problem_to_analyze_skips_grounded_answer(self):
         mock_grounded = self._ask("วิเคราะห์โจทย์ยังไง")
@@ -159,14 +148,18 @@ class AlgGroundedAnswerGatingTest(unittest.TestCase):
         self.assertNotIn("คำอธิบายจาก AI", joined)
         self.assertNotIn("ยังไม่สามารถสร้างคำอธิบายจาก AI ได้", joined)
 
-        # ต้องยังไปต่อที่ QP เลยตามที่ต้องการ (ข้าม grounded answer เฉย ๆ)
+        # ต้องยังไปต่อที่คำถามสะท้อนคิดตามที่ต้องการ (ข้าม grounded answer เฉย ๆ)
         session = main.pending_learning_sessions.get(self.author.id)
         self.assertIsNotNone(session)
         self.assertEqual(session["lg_id"], "LG02")
-        self.assertEqual(session["phase"], "PLANNING_QP")
+        self.assertTrue(session["is_learn_session"])
+        self.assertEqual(
+            session["question"], "คำถามสะท้อนคิดจำลอง",
+            "คำถามต้องมาจาก Typhoon (ask_reflection) ไม่ใช่ QP.xlsx",
+        )
         self.assertIn(
-            session["active_qp"]["system_question"], joined,
-            "ต้องยังคงถามคำถาม QP ตามปกติแม้ข้าม grounded answer",
+            session["question"], joined,
+            "ต้องยังคงถามคำถามสะท้อนคิดตามปกติแม้ข้าม grounded answer",
         )
 
     def test_algorithm_check_request_skips_grounded_answer(self):

@@ -81,16 +81,7 @@ class RegistryServiceTest(unittest.TestCase):
 
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
-        self.registry_path = os.path.join(
-            self.tmpdir, "data", "student_registry.json"
-        )
-        self.registry_patch = patch.object(
-            registry_service, "REGISTRY_PATH", self.registry_path
-        )
-        self.registry_patch.start()
-
     def tearDown(self):
-        self.registry_patch.stop()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_get_student_id_returns_none_when_not_registered(self):
@@ -98,12 +89,12 @@ class RegistryServiceTest(unittest.TestCase):
         self.assertFalse(is_registered(111))
 
     def test_register_creates_file_and_folder_if_missing(self):
-        self.assertFalse(os.path.exists(self.registry_path))
+        self.assertEqual(registry_service.get_all_students(), {})
 
         ok = register_student(111, "S-1001")
 
         self.assertTrue(ok)
-        self.assertTrue(os.path.exists(self.registry_path))
+        self.assertEqual(registry_service.get_all_students(), {"111": "S-1001"})
         self.assertEqual(get_student_id(111), "S-1001")
         self.assertTrue(is_registered(111))
 
@@ -130,14 +121,6 @@ class RegisterCommandTest(unittest.TestCase):
 
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
-        self.registry_path = os.path.join(
-            self.tmpdir, "student_registry.json"
-        )
-        self.registry_patch = patch.object(
-            registry_service, "REGISTRY_PATH", self.registry_path
-        )
-        self.registry_patch.start()
-
         main.pending_registration_changes.clear()
 
         self.channel = FakeChannel()
@@ -145,7 +128,6 @@ class RegisterCommandTest(unittest.TestCase):
         self.ctx = FakeCtx(self.channel, self.author)
 
     def tearDown(self):
-        self.registry_patch.stop()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def _register(self, student_id):
@@ -205,18 +187,6 @@ class RegistrationRequiredTest(unittest.TestCase):
 
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
-        self.log_path = os.path.join(self.tmpdir, "learning_logs.json")
-        self.log_patch = patch.object(logger, "LOG_PATH", self.log_path)
-        self.log_patch.start()
-
-        self.registry_path = os.path.join(
-            self.tmpdir, "student_registry.json"
-        )
-        self.registry_patch = patch.object(
-            registry_service, "REGISTRY_PATH", self.registry_path
-        )
-        self.registry_patch.start()
-
         main.pending_learning_sessions.clear()
         main.pending_registration_changes.clear()
         main.active_problem_context.clear()
@@ -226,8 +196,6 @@ class RegistrationRequiredTest(unittest.TestCase):
         self.ctx = FakeCtx(self.channel, self.author)
 
     def tearDown(self):
-        self.log_patch.stop()
-        self.registry_patch.stop()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_alg_blocked_when_not_registered(self):
@@ -280,9 +248,7 @@ class RegistrationRequiredTest(unittest.TestCase):
 
         asyncio.run(main.start_algorithm_flow(self.ctx, None))
 
-        with open(self.log_path, encoding="utf-8") as f:
-            import json
-            logs = json.load(f)
+        logs = logger.load_logs()
 
         self.assertEqual(len(logs), 1)
         self.assertEqual(logs[0]["student_id"], "S-6001")

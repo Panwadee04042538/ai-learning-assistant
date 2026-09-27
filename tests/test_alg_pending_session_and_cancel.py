@@ -70,18 +70,6 @@ class PendingSessionAndCancelTest(unittest.TestCase):
 
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
-        self.log_path = os.path.join(self.tmpdir, "learning_logs.json")
-        self.log_patch = patch.object(logger, "LOG_PATH", self.log_path)
-        self.log_patch.start()
-
-        self.registry_path = os.path.join(
-            self.tmpdir, "student_registry.json"
-        )
-        self.registry_patch = patch.object(
-            registry_service, "REGISTRY_PATH", self.registry_path
-        )
-        self.registry_patch.start()
-
         main.pending_learning_sessions.clear()
         main.active_problem_context.clear()
 
@@ -91,8 +79,6 @@ class PendingSessionAndCancelTest(unittest.TestCase):
         registry_service.register_student(self.author.id, "S-7901")
 
     def tearDown(self):
-        self.log_patch.stop()
-        self.registry_patch.stop()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def _existing_session(self):
@@ -191,10 +177,15 @@ class PendingSessionAndCancelTest(unittest.TestCase):
         asyncio.run(main.cancel.callback(self.ctx))
 
         self.assertIsNone(main.pending_learning_sessions.get(self.author.id))
-        self.assertIn("ยกเลิก session เดิมแล้ว", self.channel.sent[-1])
+        sent_message = self.channel.sent[-1]
+        self.assertIn("ยกเลิก session เดิมแล้ว", sent_message)
+        # ต้องแนะนำทั้ง !problem และ !learn ไม่ใช่แค่ !alg เหมือนเดิม
+        # เพราะ !alg ไม่รับคำถามอิสระอีกต่อไป ต้องเลือกโจทย์ผ่าน !problem ก่อน
+        self.assertIn("`!problem` เพื่อเลือกโจทย์", sent_message)
+        self.assertIn("`!learn` เพื่อถามความรู้ทั่วไปได้เลย", sent_message)
+        self.assertNotIn("!alg", sent_message)
 
-        with open(self.log_path, encoding="utf-8") as f:
-            logs = json.load(f)
+        logs = logger.load_logs()
         self.assertEqual(logs[0]["final_status"], "CANCELLED")
 
     def test_cancel_with_no_pending_session(self):
@@ -203,7 +194,7 @@ class PendingSessionAndCancelTest(unittest.TestCase):
         self.assertIn("ไม่มี session ค้างอยู่", self.channel.sent[-1])
 
     def test_cancel_requires_registration(self):
-        os.remove(self.registry_path)
+        registry_service._save_registry({})
 
         asyncio.run(main.cancel.callback(self.ctx))
 

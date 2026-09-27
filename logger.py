@@ -19,95 +19,33 @@
 # Final Status
 # ==========================================
 
-import json
-import os
-
 from datetime import datetime
 from uuid import uuid4
 
-
-# ==========================================
-# Path
-# ==========================================
-
-BASE_DIR = os.path.dirname(
-    os.path.abspath(__file__)
-)
-
-LOG_PATH = os.path.join(
-    BASE_DIR,
-    "learning_logs.json"
-)
+from storage import db
 
 
 # ==========================================
-# Load Existing Logs
+# Load / Save Logs (SQLite)
 # ==========================================
 
 def load_logs():
     """
-    โหลดข้อมูล Learning Logs
+    โหลดข้อมูล Learning Logs ทั้งหมด (เรียงตามลำดับที่สร้าง)
     """
 
-    if not os.path.exists(LOG_PATH):
+    return db.list_learning_logs()
 
-        return []
-
-
-    try:
-
-        with open(
-            LOG_PATH,
-            "r",
-            encoding="utf-8"
-        ) as file:
-
-            logs = json.load(file)
-
-
-            # ป้องกันกรณีข้อมูลไม่ใช่ List
-
-            if not isinstance(logs, list):
-
-                return []
-
-
-            return logs
-
-
-    except (
-        json.JSONDecodeError,
-        FileNotFoundError
-    ):
-
-        return []
-
-
-# ==========================================
-# Save Logs
-# ==========================================
 
 def save_logs(logs):
     """
-    บันทึก Learning Logs
+    แทนที่ Learning Logs ทั้งหมดด้วย logs ที่ส่งมา
+
+    ใช้สำหรับ migrate / เทสต์ — การทำงานปกติใช้ add / update / complete
+    ซึ่งเขียนเฉพาะแถวที่เกี่ยวข้อง
     """
 
-    with open(
-        LOG_PATH,
-        "w",
-        encoding="utf-8"
-    ) as file:
-
-        json.dump(
-
-            logs,
-
-            file,
-
-            ensure_ascii=False,
-
-            indent=2
-        )
+    db.replace_all_learning_logs(logs)
 
 
 # ==========================================
@@ -131,7 +69,9 @@ def add_learning_log(
 
     system_question=None,
 
-    student_id=None
+    student_id=None,
+
+    is_learn_session=False
 ):
     """
     สร้าง Learning Log ใหม่
@@ -141,9 +81,6 @@ def add_learning_log(
     dict
         Learning Log ที่สร้างใหม่
     """
-
-
-    logs = load_logs()
 
 
     # --------------------------------------
@@ -192,6 +129,8 @@ def add_learning_log(
         # ----------------------------------
 
         "user_question": user_question,
+
+        "is_learn_session": is_learn_session,
 
 
         # ----------------------------------
@@ -264,12 +203,8 @@ def add_learning_log(
     # Save
     # --------------------------------------
 
-    logs.append(
+    db.insert_learning_log(
         log_entry
-    )
-
-    save_logs(
-        logs
     )
 
 
@@ -285,17 +220,7 @@ def find_learning_log(session_id):
     ค้นหา Learning Log จาก session_id
     """
 
-    logs = load_logs()
-
-
-    for log in logs:
-
-        if log.get("session_id") == session_id:
-
-            return log
-
-
-    return None
+    return db.get_learning_log(session_id)
 
 
 # ==========================================
@@ -336,26 +261,7 @@ def update_learning_log(
     """
 
 
-    logs = load_logs()
-
-
-    updated_log = None
-
-
-    # --------------------------------------
-    # Find Session
-    # --------------------------------------
-
-    for log in logs:
-
-        if log.get("session_id") != session_id:
-
-            continue
-
-
-        # ----------------------------------
-        # Update Time
-        # ----------------------------------
+    def apply(log):
 
         log["last_updated"] = datetime.now().strftime(
             "%Y-%m-%d %H:%M:%S"
@@ -389,22 +295,14 @@ def update_learning_log(
                 "next_action": next_action
             }
 
-
-            # Ensure student_responses exists
-
-            if "student_responses" not in log:
-
-                log["student_responses"] = []
-
-
-            log["student_responses"].append(
+            log.setdefault(
+                "student_responses", []
+            ).append(
                 response_entry
             )
 
 
-            # ----------------------------------
             # Update Attempt Count
-            # ----------------------------------
 
             if attempt is not None:
 
@@ -429,23 +327,10 @@ def update_learning_log(
                 ] = understanding_level
 
 
-        updated_log = log
-
-        break
-
-
-    # --------------------------------------
-    # Save Updated Logs
-    # --------------------------------------
-
-    if updated_log is not None:
-
-        save_logs(
-            logs
-        )
-
-
-    return updated_log
+    return db.modify_learning_log(
+        session_id,
+        apply
+    )
 
 
 # ==========================================
@@ -483,45 +368,23 @@ def complete_learning_session(
     """
 
 
-    logs = load_logs()
-
-
-    updated_log = None
-
-
-    for log in logs:
-
-        if log.get("session_id") != session_id:
-
-            continue
-
+    def apply(log):
 
         log["last_updated"] = datetime.now().strftime(
             "%Y-%m-%d %H:%M:%S"
         )
 
-
         log["final_status"] = final_status
-
 
         log[
             "final_understanding_level"
         ] = final_understanding_level
 
 
-        updated_log = log
-
-        break
-
-
-    if updated_log is not None:
-
-        save_logs(
-            logs
-        )
-
-
-    return updated_log
+    return db.modify_learning_log(
+        session_id,
+        apply
+    )
 
 
 # ==========================================
@@ -537,25 +400,15 @@ def _append_session_event(session_id, list_key, entry):
     if not session_id:
         return None
 
-    logs = load_logs()
-    updated_log = None
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    for log in logs:
-        if log.get("session_id") != session_id:
-            continue
-
-        entry = dict(entry)
-        entry["timestamp"] = now
-        log.setdefault(list_key, []).append(entry)
+    def apply(log):
+        event = dict(entry)
+        event["timestamp"] = now
+        log.setdefault(list_key, []).append(event)
         log["last_updated"] = now
-        updated_log = log
-        break
 
-    if updated_log:
-        save_logs(logs)
-
-    return updated_log
+    return db.modify_learning_log(session_id, apply)
 
 
 def add_metacognitive_response(
@@ -642,60 +495,13 @@ def get_user_learning_logs(user_id):
 # ==========================================
 #
 # บันทึกว่าผู้เรียนคนใดได้รับโจทย์ข้อไหนจากคลังปัญหา (!problem)
-# เก็บแยกจาก learning_logs.json เพราะเป็นข้อมูลคนละโครงสร้าง
-# (learning_logs.json ผูกกับ session ของ Adaptive Learning)
-
-PROBLEM_LOG_PATH = os.path.join(
-    BASE_DIR,
-    "data",
-    "problem_logs.json"
-)
-
+# เก็บแยกจากตาราง learning_logs เพราะเป็นข้อมูลคนละโครงสร้าง
+# (learning_logs ผูกกับ session ของ Adaptive Learning)
 
 def load_problem_logs():
     """โหลดประวัติการรับโจทย์จากคลังปัญหา"""
 
-    if not os.path.exists(PROBLEM_LOG_PATH):
-        return []
-
-    try:
-        with open(
-            PROBLEM_LOG_PATH,
-            "r",
-            encoding="utf-8"
-        ) as file:
-
-            logs = json.load(file)
-
-            if not isinstance(logs, list):
-                return []
-
-            return logs
-
-    except (json.JSONDecodeError, FileNotFoundError):
-        return []
-
-
-def save_problem_logs(logs):
-    """บันทึกประวัติการรับโจทย์ สร้างโฟลเดอร์ data/ ให้ถ้ายังไม่มี"""
-
-    os.makedirs(
-        os.path.dirname(PROBLEM_LOG_PATH),
-        exist_ok=True
-    )
-
-    with open(
-        PROBLEM_LOG_PATH,
-        "w",
-        encoding="utf-8"
-    ) as file:
-
-        json.dump(
-            logs,
-            file,
-            ensure_ascii=False,
-            indent=2
-        )
+    return db.list_problem_logs()
 
 
 def add_problem_log(
@@ -714,8 +520,6 @@ def add_problem_log(
         รายการ log ที่บันทึกใหม่
     """
 
-    logs = load_problem_logs()
-
     entry = {
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "user_id": str(user_id),
@@ -725,8 +529,7 @@ def add_problem_log(
         "round": round_number
     }
 
-    logs.append(entry)
-    save_problem_logs(logs)
+    db.insert_problem_log(entry)
 
     return entry
 

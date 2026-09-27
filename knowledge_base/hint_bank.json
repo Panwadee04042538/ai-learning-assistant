@@ -7,7 +7,7 @@
     "Phase": "Evaluation",
     "Current System Question": "Algorithm คืออะไรในความเข้าใจของคุณ?",
     "Hint Level": "Level 1",
-    "Hint Text": "ลองอธิบายด้วยคำพูดของคุณเองว่า Algorithm มีความหมายว่าอย่างไร",
+    "Hint Text": "ลองอธิบายด้วยคำพูดของคุณเองว่า อัลกอริทึม (Algorithm) มีความหมายว่าอย่างไร",
     "Hint Purpose": "กระตุ้นให้ผู้เรียนเริ่มคิดและทบทวนด้วยตนเอง",
     "Expected Student Action": "อธิบายความหมายของ Algorithm",
     "Next Action": "รอคำตอบผู้เรียน"
@@ -46,7 +46,7 @@
     "Phase": "Evaluation",
     "Current System Question": "คุณคิดว่า Algorithm ที่ดีควรมีลักษณะอย่างไร?",
     "Hint Level": "Level 1",
-    "Hint Text": "ลองนึกถึง Algorithm ที่ดีว่าควรมีขั้นตอนการทำงานในลักษณะอย่างไร",
+    "Hint Text": "ลองนึกถึง อัลกอริทึม (Algorithm) ที่ดีว่าควรมีขั้นตอนการทำงานในลักษณะอย่างไร",
     "Hint Purpose": "กระตุ้นให้ผู้เรียนเริ่มคิดและทบทวนด้วยตนเอง",
     "Expected Student Action": "อธิบายลักษณะและหลักการสำคัญ",
     "Next Action": "รอคำตอบผู้เรียน"
@@ -748,7 +748,7 @@
     "Phase": "Evaluation",
     "Current System Question": "คุณคิดว่าลำดับขั้นตอนนี้สามารถนำไปแก้ปัญหาได้จริงหรือไม่ เพราะอะไร?",
     "Hint Level": "Level 1",
-    "Hint Text": "ลองนึกภาพว่ามีคนทำตาม Algorithm นี้จริง ๆ แล้วจะเกิดอะไรขึ้น",
+    "Hint Text": "ลองนึกภาพว่ามีคนทำตาม อัลกอริทึม (Algorithm) นี้จริง ๆ แล้วจะเกิดอะไรขึ้น",
     "Hint Purpose": "กระตุ้นให้ผู้เรียนเริ่มคิดและทบทวนด้วยตนเอง",
     "Expected Student Action": "ประเมินและอธิบายเหตุผล",
     "Next Action": "รอคำตอบผู้เรียน"
@@ -787,7 +787,7 @@
     "Phase": "Monitoring",
     "Current System Question": "ลองจำลองการทำงานของ Algorithm นี้ทีละขั้นตอนด้วยข้อมูลตัวอย่าง",
     "Hint Level": "Level 1",
-    "Hint Text": "ลองเลือกข้อมูลตัวอย่างหนึ่งชุด แล้วทำตาม Algorithm ทีละขั้น",
+    "Hint Text": "ลองเลือกข้อมูลตัวอย่างหนึ่งชุด แล้วทำตาม อัลกอริทึม (Algorithm) ทีละขั้น",
     "Hint Purpose": "กระตุ้นให้ผู้เรียนเริ่มคิดและทบทวนด้วยตนเอง",
     "Expected Student Action": "อธิบายการทำงานทีละขั้น",
     "Next Action": "รอคำตอบผู้เรียน"
@@ -826,7 +826,7 @@
     "Phase": "Monitoring",
     "Current System Question": "เมื่อลองใช้ข้อมูลตัวอย่าง ผลลัพธ์ที่ได้เป็นอย่างไร?",
     "Hint Level": "Level 1",
-    "Hint Text": "ลองดูผลลัพธ์ที่ได้หลังทำตาม Algorithm ด้วยข้อมูลตัวอย่าง",
+    "Hint Text": "ลองดูผลลัพธ์ที่ได้หลังทำตาม อัลกอริทึม (Algorithm) ด้วยข้อมูลตัวอย่าง",
     "Hint Purpose": "กระตุ้นให้ผู้เรียนเริ่มคิดและทบทวนด้วยตนเอง",
     "Expected Student Action": "ระบุผลลัพธ์ที่เกิดขึ้น",
     "Next Action": "รอคำตอบผู้เรียน"
@@ -904,7 +904,7 @@
     "Phase": "Evaluation",
     "Current System Question": "จากการตรวจสอบ Algorithm นี้สามารถแก้ปัญหาได้ครบถ้วนตามโจทย์หรือไม่ เพราะอะไร?",
     "Hint Level": "Level 1",
-    "Hint Text": "ลองพิจารณาผลจากการตรวจสอบทั้งหมดก่อนตัดสินว่า Algorithm ถูกต้องหรือไม่",
+    "Hint Text": "ลองพิจารณาผลจากการตรวจสอบทั้งหมดก่อนตัดสินว่า อัลกอริทึม (Algorithm) ถูกต้องหรือไม่",
     "Hint Purpose": "กระตุ้นให้ผู้เรียนเริ่มคิดและทบทวนด้วยตนเอง",
     "Expected Student Action": "ประเมินและอธิบายเหตุผล",
     "Next Action": "รอคำตอบผู้เรียน"
@@ -969,7 +969,7 @@
     "Phase": "Planning",
     "Current System Question": "ลักษณะการทำงานของโจทย์นี้เป็นการทำงานตามลำดับหรือไม่?",
     "Hint Level": "Level 3",
-    "Hint Text": "ถ้าทำงานเป็นขั้นตอนต่อเนื่องจากต้นจนจบโดยไม่มีเงื่อนไขหรือการวนซ้ำ ให้พิจารณา Sequence",
+    "Hint Text": "ถ้าทำงานเป็นขั้นตอนต่อเนื่องจากต้นจนจบโดยไม่มีเงื่อนไขหรือการวนซ้ำ ให้พิจารณา รูปแบบลำดับขั้นตอน (Sequence)",
     "Hint Purpose": "ให้ Scaffold เพื่อช่วยจัดโครงสร้างความคิดโดยไม่เฉลยคำตอบทั้งหมด",
     "Expected Student Action": "ระบุลักษณะการทำงาน",
     "Next Action": "กลับไปตอบคำถามหลัก"
@@ -1086,7 +1086,7 @@
     "Phase": "Planning",
     "Current System Question": "จากลักษณะของโจทย์ คุณคิดว่าควรเลือกโครงสร้างใด?",
     "Hint Level": "Level 3",
-    "Hint Text": "ลองสรุปว่า Sequence = ทำตามลำดับ, Selection = มีเงื่อนไข, Loop = ทำซ้ำ แล้วเลือกตามโจทย์",
+    "Hint Text": "ลองสรุปว่า รูปแบบลำดับขั้นตอน (Sequence) = ทำตามลำดับ, Selection = มีเงื่อนไข, Loop = ทำซ้ำ แล้วเลือกตามโจทย์",
     "Hint Purpose": "ให้ Scaffold เพื่อช่วยจัดโครงสร้างความคิดโดยไม่เฉลยคำตอบทั้งหมด",
     "Expected Student Action": "ระบุโครงสร้างที่เลือก",
     "Next Action": "กลับไปตอบคำถามหลัก"
@@ -1177,7 +1177,7 @@
     "Phase": "Monitoring",
     "Current System Question": "ลองพิจารณา Algorithm นี้ มีจุดใดที่อาจทำงานผิดพลาดหรือไม่?",
     "Hint Level": "Level 1",
-    "Hint Text": "ลองไล่ดู Algorithm ทีละขั้นเพื่อหาจุดที่อาจทำให้ผลลัพธ์ผิด",
+    "Hint Text": "ลองไล่ดู อัลกอริทึม (Algorithm) ทีละขั้นเพื่อหาจุดที่อาจทำให้ผลลัพธ์ผิด",
     "Hint Purpose": "กระตุ้นให้ผู้เรียนเริ่มคิดและทบทวนด้วยตนเอง",
     "Expected Student Action": "ระบุจุดที่อาจผิดพลาด",
     "Next Action": "รอคำตอบผู้เรียน"
@@ -1229,7 +1229,7 @@
     "Phase": "Monitoring",
     "Current System Question": "Algorithm นี้ครอบคลุมทุกกรณีที่อาจเกิดขึ้นหรือไม่?",
     "Hint Level": "Level 2",
-    "Hint Text": "ลองถามว่าถ้า Input เปลี่ยนไปหรือมีค่าพิเศษ Algorithm ยังทำงานได้หรือไม่",
+    "Hint Text": "ลองถามว่าถ้า Input เปลี่ยนไปหรือมีค่าพิเศษ อัลกอริทึม (Algorithm) ยังทำงานได้หรือไม่",
     "Hint Purpose": "ชี้แนวทางในการคิดโดยยังไม่เฉลยคำตอบโดยตรง",
     "Expected Student Action": "ระบุกรณีที่ยังไม่ครอบคลุม",
     "Next Action": "รอคำตอบผู้เรียน"
@@ -1242,7 +1242,7 @@
     "Phase": "Monitoring",
     "Current System Question": "Algorithm นี้ครอบคลุมทุกกรณีที่อาจเกิดขึ้นหรือไม่?",
     "Hint Level": "Level 3",
-    "Hint Text": "ลองทดสอบอย่างน้อยกรณีปกติและกรณีที่แตกต่าง แล้วดูว่า Algorithm ครอบคลุมหรือไม่",
+    "Hint Text": "ลองทดสอบอย่างน้อยกรณีปกติและกรณีที่แตกต่าง แล้วดูว่า อัลกอริทึม (Algorithm) ครอบคลุมหรือไม่",
     "Hint Purpose": "ให้ Scaffold เพื่อช่วยจัดโครงสร้างความคิดโดยไม่เฉลยคำตอบทั้งหมด",
     "Expected Student Action": "ระบุกรณีที่ยังไม่ครอบคลุม",
     "Next Action": "กลับไปตอบคำถามหลัก"
@@ -1307,7 +1307,7 @@
     "Phase": "Evaluation",
     "Current System Question": "หากต้องปรับปรุง Algorithm นี้ คุณจะปรับอย่างไร?",
     "Hint Level": "Level 2",
-    "Hint Text": "ลองคิดว่าถ้าปรับจุดนั้นแล้ว Algorithm จะทำงานดีขึ้นอย่างไร",
+    "Hint Text": "ลองคิดว่าถ้าปรับจุดนั้นแล้ว อัลกอริทึม (Algorithm) จะทำงานดีขึ้นอย่างไร",
     "Hint Purpose": "ชี้แนวทางในการคิดโดยยังไม่เฉลยคำตอบโดยตรง",
     "Expected Student Action": "เสนอวิธีปรับปรุง",
     "Next Action": "รอคำตอบผู้เรียน"
@@ -1333,7 +1333,7 @@
     "Phase": "Evaluation",
     "Current System Question": "เพราะเหตุใดการปรับปรุงนี้จึงทำให้ Algorithm ดีขึ้น?",
     "Hint Level": "Level 1",
-    "Hint Text": "ลองเปรียบเทียบ Algorithm ก่อนและหลังปรับปรุง",
+    "Hint Text": "ลองเปรียบเทียบ อัลกอริทึม (Algorithm) ก่อนและหลังปรับปรุง",
     "Hint Purpose": "กระตุ้นให้ผู้เรียนเริ่มคิดและทบทวนด้วยตนเอง",
     "Expected Student Action": "อธิบายเหตุผล",
     "Next Action": "รอคำตอบผู้เรียน"
@@ -1489,7 +1489,7 @@
     "Phase": "Monitoring",
     "Current System Question": "ลองตรวจสอบ Algorithm ที่คุณออกแบบ มีขั้นตอนใดขาดหายหรือไม่?",
     "Hint Level": "Level 1",
-    "Hint Text": "ลองไล่ดู Algorithm ของคุณทีละขั้นว่ามีช่วงใดหายไปหรือไม่",
+    "Hint Text": "ลองไล่ดู อัลกอริทึม (Algorithm) ของคุณทีละขั้นว่ามีช่วงใดหายไปหรือไม่",
     "Hint Purpose": "กระตุ้นให้ผู้เรียนเริ่มคิดและทบทวนด้วยตนเอง",
     "Expected Student Action": "ระบุสิ่งที่ขาดหรือยืนยันว่าครบ",
     "Next Action": "รอคำตอบผู้เรียน"
@@ -1528,7 +1528,7 @@
     "Phase": "Monitoring",
     "Current System Question": "เมื่อลองจำลองการทำงานด้วยข้อมูลตัวอย่าง Algorithm ของคุณให้ผลลัพธ์อย่างไร?",
     "Hint Level": "Level 1",
-    "Hint Text": "ลองเลือกข้อมูลตัวอย่างแล้วทำตาม Algorithm ของคุณทีละขั้น",
+    "Hint Text": "ลองเลือกข้อมูลตัวอย่างแล้วทำตาม อัลกอริทึม (Algorithm) ของคุณทีละขั้น",
     "Hint Purpose": "กระตุ้นให้ผู้เรียนเริ่มคิดและทบทวนด้วยตนเอง",
     "Expected Student Action": "จำลองผลการทำงาน",
     "Next Action": "รอคำตอบผู้เรียน"
@@ -1580,7 +1580,7 @@
     "Phase": "Evaluation",
     "Current System Question": "คุณคิดว่า Algorithm ที่ออกแบบสามารถแก้ปัญหาตามสถานการณ์ได้หรือไม่ เพราะอะไร?",
     "Hint Level": "Level 2",
-    "Hint Text": "ลองถามว่า Algorithm พาไปถึงผลลัพธ์ที่สถานการณ์ต้องการจริงหรือไม่",
+    "Hint Text": "ลองถามว่า อัลกอริทึม (Algorithm) พาไปถึงผลลัพธ์ที่สถานการณ์ต้องการจริงหรือไม่",
     "Hint Purpose": "ชี้แนวทางในการคิดโดยยังไม่เฉลยคำตอบโดยตรง",
     "Expected Student Action": "ประเมินและอธิบายเหตุผล",
     "Next Action": "รอคำตอบผู้เรียน"

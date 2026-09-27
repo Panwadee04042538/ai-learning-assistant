@@ -29,7 +29,6 @@ from typhoon_service import (
 from controllers.planning_controller import start_planning
 from controllers.monitoring_controller import start_monitoring
 from controllers.evaluation_controller import start_evaluation
-from question_service import get_question_for_learning
 try:
     from qp_service import select_qp, get_qp_by_lg_phase, get_qp_by_lg
 except ImportError:
@@ -606,6 +605,12 @@ active_problem_context = {}
 
 MAX_ATTEMPTS = 3
 
+# เพดานจำนวนครั้งที่ rule-based check ตีกลับ (ขาดขั้น "จบ"/ขั้นแสดงผล)
+# ถ้าเด็กถูกตีกลับครบเท่านี้แล้ว ครั้งถัดไปปล่อยผ่านให้ Typhoon ประเมินเลย
+MAX_RULE_REJECTIONS = 3
+
+RULE_BYPASS_NOTICE = "ลองให้ระบบช่วยวิเคราะห์เพิ่มเติมให้นะ"
+
 REGISTRATION_REQUIRED_MESSAGE = (
     "กรุณาลงทะเบียนก่อนใช้งาน พิมพ์ !register <รหัสนักเรียน> เช่น !register 12345"
 )
@@ -926,11 +931,29 @@ def _get_next_qp_after_algorithm(session):
 
 
 def build_qp_feedback_prompt(qp, student_answer, learning_goal, context=""):
+    phase = qp.get('phase', '-')
+
+    evaluation_only_rules = ""
+    if phase == "Evaluation":
+        evaluation_only_rules = """
+กฎเพิ่มเติมสำหรับขั้น Evaluation เท่านั้น (สำคัญมาก):
+- คำถามขั้น Evaluation ต้องการแค่ให้คุณประเมินตัวเองว่าทำได้หรือไม่
+  พร้อมเหตุผลสั้น ๆ เท่านั้น ไม่ได้ต้องการให้เขียน Algorithm ซ้ำ
+  หรือยกตัวอย่าง Algorithm เพิ่มเติมแต่อย่างใด
+- ห้ามขอให้ผู้เรียนยกตัวอย่าง Algorithm ห้ามขอให้เขียนขั้นตอนใหม่
+  และห้ามขอรายละเอียดเพิ่มเติมเกี่ยวกับ Algorithm ในข้อความนี้
+- ถ้าคำตอบมีลักษณะประเมินตนเองพร้อมเหตุผลแล้ว เช่น "ได้แล้ว เพราะ ..."
+  หรือ "ทำได้ เพราะ ..." ให้ถือว่าตอบครบถ้วนตามที่คำถามต้องการทันที
+  ไม่ต้องขอข้อมูลเพิ่มเติมหรือชวนทำอะไรต่ออีก
+- feedback ของขั้นนี้ต้องสั้นเป็นพิเศษ ไม่เกิน 2-3 ประโยค และจบข้อความ
+  ได้เลย ไม่ต้องมีคำชวนต่อท้าย
+"""
+
     return f"""
 คุณคือ AI Learning Assistant ทำหน้าที่เป็นผู้ช่วยด้าน Metacognition
 
 Learning Goal: {learning_goal}
-Phase: {qp.get('phase', '-')}
+Phase: {phase}
 คำถาม QP: {qp.get('system_question', '-')}
 จุดประสงค์ของคำถาม: {qp.get('question_purpose', '-')}
 สิ่งที่คาดหวังให้ผู้เรียนตอบ: {qp.get('expect_input', '-')}
@@ -953,8 +976,82 @@ Phase: {qp.get('phase', '-')}
 5. ห้ามสร้างคำถาม Metacognition ใหม่ คำถามลักษณะนี้ต้องมาจาก QP.xlsx ที่ระบบเลือกให้เท่านั้น
 6. ไม่ต้องให้คะแนนและไม่ต้องรายงาน progress
 7. ภาษาไทย เหมาะกับนักเรียนระดับอาชีวศึกษา
-
+{evaluation_only_rules}
 feedback ทั้งหมดต้องสั้น ไม่เกิน 3 ประโยค เป็นประโยคบอกเล่าล้วน
+ห้ามมีประโยคคำถามหรือเครื่องหมาย "?" แม้แต่ที่เดียว
+"""
+
+
+def build_learn_reflection_prompt(question, concept_text, ai_answer=None):
+    """
+    !learn ไม่มีโจทย์ให้วิเคราะห์ คำถามจึงต้องมาจากเนื้อหาที่เพิ่งอธิบาย
+    ไปเท่านั้น (concept_text / ai_answer) ไม่ใช่ QP.xlsx ที่ออกแบบมา
+    สำหรับโจทย์จริง
+    """
+    explained_text = ai_answer or concept_text
+
+    return f"""
+เนื้อหาที่เพิ่งอธิบายให้ผู้เรียนอ่านไป:
+{explained_text}
+
+คำถามเดิมของผู้เรียน (ใช้เป็นบริบทประกอบเท่านั้น):
+{question}
+
+สร้างคำถามสะท้อนคิด 1 ข้อ ที่ให้ผู้เรียนคิดต่อจากเนื้อหาข้างต้นโดยตรง
+
+ข้อกำหนด:
+1. คำถามต้องเกี่ยวกับเนื้อหาที่อธิบายไว้ข้างต้นโดยตรงเท่านั้น
+2. ห้ามอ้างถึงคำว่า "โจทย์" หรือ "สถานการณ์" ใด ๆ เพราะเนื้อหานี้
+   ไม่มีโจทย์หรือสถานการณ์ให้วิเคราะห์
+3. ห้ามถามเกี่ยวกับสิ่งที่ไม่ได้อยู่ในเนื้อหาข้างต้น
+4. คำถามต้องสั้นมาก ไม่เกิน 1 ประโยค ห้ามเป็นประโยคซ้อนหลายเงื่อนไข
+   หรือมีคำเชื่อมหลายจุดในประโยคเดียว
+5. ใช้คำง่าย ๆ แบบที่ครูถามคุยกับเด็กมัธยมปลาย (ปวช.1) ทั่วไป
+   ไม่ใช่ภาษาวิชาการหรือภาษาตำรา
+6. ให้ถามสิ่งที่ผู้เรียนสังเกตหรือนึกภาพออกได้จากชีวิตจริง
+   ไม่ใช่ถามนิยามหรือทฤษฎีตรง ๆ
+7. ห้ามใช้ศัพท์เทคนิคที่ฟังดูเป็นทางการในตัวคำถาม เช่น "ดำเนินการ"
+   "ลำดับ" "ตัดสินใจเพิ่มเติม" ให้ใช้คำพูดทั่วไปแทน เช่น "ทำ"
+   "เกิดอะไรขึ้น" "ต่างกันยังไง"
+8. ตัวอย่างคำถามที่ดี (สั้น ใช้คำง่าย ถามจากชีวิตจริง):
+   - "ถ้าทำขั้นตอนผิดลำดับ จะเกิดอะไรขึ้น?"
+   - "loop ต่างจากการทำงานปกติยังไง?"
+9. ตัวอย่างคำถามที่ห้ามถามแบบนี้ (ซับซ้อน ยาว ใช้ศัพท์วิชาการเกินไป):
+   - "ทำไมการเขียนโปรแกรมแบบ Sequence จึงต้องดำเนินการทีละขั้นตอน
+     จากบนลงล่างโดยไม่มีการเปลี่ยนลำดับหรือตัดสินใจเพิ่มเติม?"
+"""
+
+
+def build_learn_feedback_prompt(question, student_answer, learning_goal):
+    """
+    Feedback ของ !learn: ประเมินความเข้าใจจากคำตอบต่อคำถามสะท้อนคิด 1 ข้อ
+    แล้วจบทันที ไม่มีขั้นถัดไปให้ต่อ (ต่างจาก build_qp_feedback_prompt ที่
+    ระบบจะส่งคำถามขั้นถัดไปต่อเสมอ)
+    """
+    return f"""
+คุณคือ AI Learning Assistant ทำหน้าที่ประเมินความเข้าใจของผู้เรียนระดับ ปวช.1
+จากคำถามสะท้อนคิดสั้น ๆ เพียง 1 ข้อ (ไม่มีโจทย์หรือสถานการณ์ใด ๆ ให้วิเคราะห์)
+
+Learning Goal: {learning_goal}
+คำถามที่ถาม: {question}
+
+คำตอบของคุณ:
+{student_answer}
+
+หน้าที่:
+1. ประเมินว่าคำตอบแสดงความเข้าใจเนื้อหาหรือไม่ แล้วให้ feedback สั้น ๆ
+   โดยพูดกับผู้ตอบว่า "คุณ" ห้ามใช้คำว่า "นักเรียน"
+2. ชี้ให้เห็นเฉพาะจุดที่ปรากฏจริงในคำตอบว่าเข้าใจถูกต้อง ถ้าไม่มีจุดที่
+   ทำได้ดีจริง ให้ข้ามส่วนนี้ไปเลย ห้ามชมลอย ๆ
+3. ห้ามเฉลยคำตอบที่ถูกต้องตรง ๆ แม้พบความเข้าใจผิด ให้ชี้เป็นข้อสังเกต
+   แบบประโยคบอกเล่าสั้น ๆ แทนว่าจุดไหนควรกลับไปทบทวนอีกครั้ง
+4. ห้ามสร้างคำถามใด ๆ ในข้อความนี้โดยเด็ดขาด ห้ามลงท้ายด้วยคำถาม และ
+   ห้ามใช้เครื่องหมาย "?" เพราะบทเรียนนี้จบทันทีหลังข้อความนี้ ไม่มี
+   คำถามขั้นถัดไป ไม่มี hint และไม่มีขั้นตอนใด ๆ ต่อจากนี้อีก
+5. ไม่ต้องให้คะแนนและไม่ต้องรายงาน progress
+6. ภาษาไทย เหมาะกับนักเรียนระดับ ปวช.1
+
+feedback ทั้งหมดต้องสั้น ไม่เกิน 2-3 ประโยค เป็นประโยคบอกเล่าล้วน
 ห้ามมีประโยคคำถามหรือเครื่องหมาย "?" แม้แต่ที่เดียว
 """
 
@@ -1000,25 +1097,6 @@ async def handle_qp_response(message, session):
         "feedback": qp_feedback,
     })
 
-    # !learn ถามความรู้ทั่วไปแค่ QP เดียวแล้วจบเลย ไม่ว่าคำถามนั้นจะมาจาก
-    # Phase ไหนก็ตาม (ไม่มีขั้นส่ง Algorithm ไม่ว่า LG ไหนก็ตาม)
-    if session.get("is_learn_session"):
-        await send_long_message(
-            message.channel,
-            "## 🪞 สรุปคำตอบ\n\n"
-            f"{qp_feedback}\n\n"
-            "🎉 จบการเรียนรู้ครั้งนี้แล้ว"
-        )
-
-        session_id = session.get("session_id")
-        if session_id:
-            complete_learning_session(
-                session_id=session_id,
-                final_status="COMPLETED"
-            )
-        pending_learning_sessions.pop(message.author.id, None)
-        return
-
     if phase == "PLANNING_QP":
         # ส่ง feedback ของคำถามวางแผนก่อน (Planning มีแค่ 1 คำถามต่อ session)
         await send_long_message(
@@ -1028,7 +1106,7 @@ async def handle_qp_response(message, session):
         )
 
         # PLANNING_QP ตอนนี้มาจาก session ที่ทำโจทย์จาก Problem Bank เท่านั้น
-        # (!learn ใช้ QP เดียวจบ ไม่ผ่านจุดนี้ ดู is_learn_session ด้านบน)
+        # (!learn มี handle_learn_response ของตัวเองแยกต่างหาก ไม่ผ่านจุดนี้)
         # จึงไปลงมือเขียน Algorithm เสมอ ไม่ว่า LG ที่แท็กไว้กับโจทย์จะเป็น
         # อะไรก็ตาม Monitoring ถูกย้ายไปถามหลังประเมิน Algorithm แล้วแทน
         # (ดู MONITORING_QP_POST_ALGORITHM ด้านล่าง) ไม่ใช่ก่อนส่ง Algorithm
@@ -1054,7 +1132,7 @@ async def handle_qp_response(message, session):
             message.channel,
             "### 🚀 ลองทำโจทย์\n\n"
             f"{session.get('algorithm_question', '-')}\n\n"
-            "ส่ง Algorithm ของคุณมาได้เลย\n\n"
+            "ส่งอัลกอริทึม (Algorithm) ของคุณมาได้เลย\n\n"
             "💡 ใส่หมายเลขข้อให้ครบทุกขั้นตอน เช่น\n"
             "1. เริ่มต้น\n"
             "2. รับค่า...\n"
@@ -1086,7 +1164,7 @@ async def handle_qp_response(message, session):
         # ขั้นถัดไปคือ Evaluation ไม่ใช่ให้กลับไปเขียน Algorithm ซ้ำ
         await send_long_message(
             message.channel,
-            "## 🔍 ลองตรวจสอบ Algorithm ที่เขียน\n\n"
+            "## 🔍 ลองตรวจสอบอัลกอริทึม (Algorithm) ที่เขียน\n\n"
             f"{qp_feedback}"
         )
 
@@ -1138,6 +1216,58 @@ async def handle_qp_response(message, session):
         return
 
 
+async def handle_learn_response(message, session):
+    """
+    ประมวลผลคำตอบของ !learn: คำถามเดียว คำตอบเดียว ประเมินความเข้าใจ
+    แล้วจบทันที ไม่มี hint, ไม่มีขั้นส่ง Algorithm, ไม่มี Evaluation QP,
+    ไม่มี max attempts และไม่มี phase ใด ๆ ทั้งสิ้น (ต่างจาก
+    handle_qp_response ที่ใช้กับ session ของ !alg/!problem)
+    """
+    student_answer = message.content.strip()
+
+    processing = await message.channel.send("🧠 กำลังประเมินความเข้าใจของคุณ...")
+    try:
+        prompt = build_learn_feedback_prompt(
+            session.get("question", "-"),
+            student_answer,
+            session.get("learning_goal", "-")
+        )
+        feedback = await asyncio.to_thread(ask_ai, prompt)
+    except Exception as e:
+        feedback = "ลองทบทวนเนื้อหาที่เพิ่งอธิบายไปอีกครั้ง แล้วนำแนวคิดนั้นไปใช้ต่อได้เลย"
+        print(f"⚠️ Learn Response Error: {type(e).__name__}: {e}")
+    finally:
+        try:
+            await processing.delete()
+        except Exception:
+            pass
+
+    add_metacognitive_response(
+        session_id=session.get("session_id"),
+        phase="REFLECTION",
+        question_id=None,
+        qp_id=None,
+        system_question=session.get("question"),
+        student_answer=student_answer,
+        feedback=feedback
+    )
+
+    await send_long_message(
+        message.channel,
+        "## 🪞 สรุปคำตอบ\n\n"
+        f"{feedback}\n\n"
+        "🎉 จบการเรียนรู้ครั้งนี้แล้ว"
+    )
+
+    session_id = session.get("session_id")
+    if session_id:
+        complete_learning_session(
+            session_id=session_id,
+            final_status="COMPLETED"
+        )
+    pending_learning_sessions.pop(message.author.id, None)
+
+
 # ==================================================
 # LG01 Warmup / Wrapup (เปิดคาบ / ปิดคาบ)
 # ==================================================
@@ -1145,10 +1275,10 @@ async def handle_qp_response(message, session):
 # จุดเปิดคาบ (!warmup) และปิดคาบ (!wrapup) แทนกิจกรรมหลัก
 
 LG01_ALGORITHM_INTRO = (
-    "## 📖 ก่อนเริ่มคาบเรียน: Algorithm คืออะไร\n\n"
-    "Algorithm คือลำดับขั้นตอนที่ชัดเจนและมีลำดับก่อน-หลัง "
+    "## 📖 ก่อนเริ่มคาบเรียน: อัลกอริทึม (Algorithm) คืออะไร\n\n"
+    "อัลกอริทึม (Algorithm) คือลำดับขั้นตอนที่ชัดเจนและมีลำดับก่อน-หลัง "
     "สำหรับใช้แก้ปัญหาหนึ่ง ๆ ให้สำเร็จ\n\n"
-    "หลักการสำคัญของ Algorithm:\n"
+    "หลักการสำคัญของอัลกอริทึม (Algorithm):\n"
     "1. มีจุดเริ่มต้นและจุดสิ้นสุดที่ชัดเจน\n"
     "2. แต่ละขั้นตอนต้องทำได้จริงและไม่กำกวม\n"
     "3. ขั้นตอนเรียงลำดับกันจนนำไปสู่ผลลัพธ์ที่ต้องการ\n"
@@ -1393,7 +1523,7 @@ async def handle_revise_request(message, session):
 
     await send_long_message(
         message.channel,
-        "### 🔁 กลับไปแก้ Algorithm ได้ 1 ครั้ง"
+        "### 🔁 กลับไปแก้อัลกอริทึม (Algorithm) ได้ 1 ครั้ง"
     )
 
 
@@ -1541,7 +1671,8 @@ async def start_learn_flow(ctx, question=None):
             ↓
         Grounded Answer (คำอธิบายกระชับ ถ้าเป็นคำถามความรู้ทั่วไป)
             ↓
-        QP 1 ข้อจาก QP.xlsx
+        Typhoon สร้างคำถามสะท้อนคิด 1 ข้อ จากเนื้อหาที่เพิ่งอธิบายไป
+        (ไม่ใช่ QP.xlsx เพราะ !learn ไม่มีโจทย์ให้วิเคราะห์)
             ↓
         จบ (ไม่มีขั้นส่ง Algorithm ไม่ว่า LG ไหนก็ตาม)
     """
@@ -1751,11 +1882,6 @@ Learning Goal:
         "ไม่พบ KU"
     )
 
-    title = unit.get(
-        "title",
-        "ไม่พบหัวข้อ"
-    )
-
     matched_term = knowledge_result.get(
         "matched_term",
         "-"
@@ -1828,110 +1954,77 @@ Learning Goal:
         ai_answer = None
 
     # ==========================================
-    # Select QP from QP.xlsx
+    # Generate Reflection Question (Typhoon)
     # ==========================================
-    # Session ใหม่ต้องเริ่มที่ Planning ก่อนเสมอถ้า LG นี้มีขั้น Planning
-    # ตามดีไซน์ ถ้าไม่มี (เช่น LG01 มีเฉพาะ Evaluation) ให้ fallback
-    # ไป Monitoring แล้วค่อย Evaluation ตามลำดับ
-    session_phase, learning_question = pick_initial_session_phase_and_qp(
-        goal_id
-    )
+    # !learn ไม่มีโจทย์ให้วิเคราะห์ จึงไม่ดึงคำถามจาก QP.xlsx ที่ออกแบบมา
+    # สำหรับโจทย์จริง (เช่น "โจทย์นี้ต้องการให้ทำอะไร") แทนที่ด้วยการให้
+    # Typhoon สร้างคำถามสะท้อนคิด 1 ข้อ จากเนื้อหาที่เพิ่งอธิบายไปแทน
+    reflection_question = None
 
-    if not learning_question:
-        learning_question = get_question_for_learning(
-            lg_id=goal_id, ku_id=ku_id, user_input=question
-        )
-        session_phase = None
+    if concept_text:
+        try:
+            reflection_question = await asyncio.to_thread(
+                ask_reflection,
+                build_learn_reflection_prompt(
+                    question, concept_text, ai_answer
+                )
+            )
+        except Exception as e:
+            print("\n========== REFLECTION QUESTION ERROR ==========")
+            print(type(e).__name__)
+            print(e)
+            print("================================================\n")
+            reflection_question = None
 
     # ==========================================
     # Validate Learning Question
     # ==========================================
-    if not learning_question:
+    if not reflection_question:
         print("\n========== LEARNING QUESTION NOT FOUND ==========")
         print(f"Question : {question}")
         print(f"LG       : {goal_id}")
         print(f"KU       : {ku_id}")
         print("=================================================\n")
         await ctx.send(
-            "⚠️ **พบเนื้อหาแล้ว แต่ยังไม่พบคำถามสำหรับการเรียนรู้**\n\n"
+            "⚠️ **พบเนื้อหาแล้ว แต่ยังไม่สามารถสร้างคำถามสำหรับการเรียนรู้ได้**\n\n"
             f"**LG:** {goal_id}\n"
             f"**KU:** {ku_id}\n\n"
             "ระบบจึงยังไม่เริ่ม Adaptive Learning Session"
         )
         return
 
+    reflection_question = reflection_question.strip()
+
     # ==========================================
     # Save Learning Log
     # ==========================================
 
-    log_entry = None
-
-    if learning_question:
-
-        log_entry = add_learning_log(
-
-            user_id=ctx.author.id,
-
-            username=str(ctx.author),
-
-            user_question=question,
-
-            ku_id=ku_id,
-
-            ku_title=unit.get("title"),
-
-            lg_id=goal_id,
-
-            lg_name=goal.get("learning_goal"),
-
-            qp_id=learning_question.get("qp_id"),
-
-            question_id=learning_question.get("question_id"),
-
-            system_question=learning_question.get(
-                "system_question"
-            ),
-
-            student_id=get_student_id(ctx.author.id)
-        )
-
-
-    # ==========================================
-    # Prepare QP Session
-    # ==========================================
-    active_qp = learning_question
-
-    # ถ้า session เริ่มที่ Monitoring ทันที (เช่น LG05/LG07 ที่ไม่มี Planning)
-    # ให้ผูก hint_question_id กับคำถาม Monitoring ข้อนี้ไว้เลย
-    hint_question_id = (
-        active_qp.get("question_id") if session_phase == "Monitoring" else None
+    log_entry = add_learning_log(
+        user_id=ctx.author.id,
+        username=str(ctx.author),
+        user_question=question,
+        ku_id=ku_id,
+        ku_title=unit.get("title"),
+        lg_id=goal_id,
+        lg_name=goal.get("learning_goal"),
+        system_question=reflection_question,
+        student_id=get_student_id(ctx.author.id),
+        is_learn_session=True
     )
 
     # ==========================================
     # Save Pending Learning Session
     # ==========================================
+    # !learn คือคำถามเดียว คำตอบเดียว จบทันที (ดู handle_learn_response)
+    # จึงไม่มี hint, Algorithm, Evaluation QP, max attempts หรือ phase ใด ๆ
+    # เหมือน session ของ !alg/!problem
     pending_learning_sessions[ctx.author.id] = {
+        "is_learn_session": True,
         "learning_goal": learning_goal,
-        "question": active_qp.get("system_question", question),
-        "algorithm_question": question,
-        "ku_id": ku_id,
         "lg_id": goal_id,
-        "question_id": active_qp.get("question_id"),
-        "qp_id": active_qp.get("qp_id"),
-        "hint_question_id": hint_question_id,
-        "attempt": 1,
-        "max_attempts": MAX_ATTEMPTS,
-        "hint_level": 0,
-        "attempt_history": [],
-        "qp_responses": [],
-        "active_qp": active_qp,
-        "phase": PHASE_TO_SESSION_KEY.get(session_phase, "EVALUATION_QP"),
-        "main_question_count": 1,
-        "reflection_shown": False,
+        "ku_id": ku_id,
+        "question": reflection_question,
         "session_id": log_entry.get("session_id") if log_entry else None,
-        # !learn ถามความรู้ทั่วไปแค่ 1 QP แล้วจบเลย ไม่ว่า LG ไหนก็ตาม
-        # ไม่มีขั้นส่ง Algorithm (ดูจุดเช็คนี้ใน handle_qp_response)
-        "is_learn_session": True
     }
 
     # ----------------------------------------------
@@ -1944,12 +2037,6 @@ Learning Goal:
 
         f"**LG:** {goal_id} — "
         f"{learning_goal}\n\n"
-
-        "### 📚 Knowledge Retrieved\n\n"
-
-        f"**KU:** {ku_id}\n"
-
-        f"**หัวข้อ:** {title}\n"
     )
 
     if DEBUG_MODE:
@@ -1966,97 +2053,28 @@ Learning Goal:
 
 
     # ----------------------------------------------
-    # Related Learning Goals
-    # ----------------------------------------------
-
-    related_lg = unit.get(
-        "related_lg",
-        []
-    )
-
-
-    if related_lg:
-
-        message += (
-
-            "\n**Related LG:** "
-
-            + ", ".join(related_lg)
-
-            + "\n"
-        )
-
-
-    # ----------------------------------------------
     # AI Grounded Answer
     # ----------------------------------------------
     # แสดงเฉพาะตอนที่เป็นคำถามความรู้ทั่วไปและมีการเรียก Grounded Answer
-    # จริง ถ้าข้ามไปเพราะเป็นโจทย์ให้วิเคราะห์ ก็ไม่ต้องแสดงหัวข้อนี้เลย
+    # จริง ถ้าข้ามไปเพราะเป็นโจทย์ให้วิเคราะห์ ก็ไม่ต้องแสดงส่วนนี้เลย
     # (ไม่ใช่ความผิดพลาด จึงไม่ควรขึ้นข้อความ "ยังไม่สามารถสร้าง...")
+    # ไม่มี header กำกับไว้ตรง ๆ ให้กลืนเป็นส่วนหนึ่งของข้อความเดียวกัน
 
     if should_answer_grounded_question:
 
         message += (
-
-            "\n### 🤖 คำอธิบายจาก AI\n\n"
+            "\n\n"
+            + (ai_answer or "ยังไม่สามารถสร้างคำอธิบายจาก AI ได้")
         )
 
-        if ai_answer:
-
-            message += ai_answer
-
-        else:
-
-            message += (
-
-                "ยังไม่สามารถสร้างคำอธิบายจาก AI ได้"
-            )
-
-
     # ----------------------------------------------
-    # QP / Metacognitive Prompt
-    # ----------------------------------------------
-
-    if active_qp:
-
-        if session_phase == "Monitoring":
-            # LG นี้ไม่มีขั้น Planning (เช่น LG05/LG07) ผู้เรียนได้รับ
-            # Algorithm ที่เกี่ยวข้องมาให้ตรวจสอบโดยตรง ไม่ต้องวางแผนเอง
-            message += (
-                "\n\n### 🔍 ขั้นตรวจสอบ Algorithm\n\n"
-                "หัวข้อนี้ไม่มีขั้นวางแผน คุณจะได้ตรวจสอบ Algorithm "
-                "ที่เกี่ยวข้องกับคำถามของคุณโดยตรง กรุณาตอบคำถามต่อไปนี้"
-                "เพื่อเริ่มตรวจสอบ\n\n"
-                f"{active_qp.get('system_question', '-')}"
-            )
-        else:
-            message += (
-                "\n\n### 🧠 คำถามช่วยคิด\n\n"
-                f"{active_qp.get('system_question', '-')}"
-            )
-
-    # ----------------------------------------------
-    # Knowledge Source
+    # Reflection Question
     # ----------------------------------------------
 
     message += (
-
-        "\n\n### 📚 อ้างอิงเนื้อหาจาก Knowledge Unit\n\n"
-
-        f"**KU:** {ku_id} — {title}"
+        "\n\n### 🧠 คำถามช่วยคิด\n\n"
+        f"{reflection_question}"
     )
-
-
-    # ----------------------------------------------
-    # Success
-    # ----------------------------------------------
-
-    if DEBUG_MODE:
-        message += (
-
-            "\n\n✅ **Test Case Mapping Success**"
-        )
-
 
     # ----------------------------------------------
     # Send Result
@@ -2144,6 +2162,8 @@ async def _start_problem_algorithm_session(ctx, problem):
         "question_id": active_qp.get("question_id"),
         "qp_id": active_qp.get("qp_id"),
         "problem_id": problem_id,
+        "expected_output": problem.get("output"),
+        "model_answer": problem.get("model_answer"),
         "hint_question_id": hint_question_id,
         "attempt": 1,
         "max_attempts": MAX_ATTEMPTS,
@@ -2164,8 +2184,8 @@ async def _start_problem_algorithm_session(ctx, problem):
 
     if session_phase == "Monitoring":
         message += (
-            "### 🔍 ขั้นตรวจสอบ Algorithm\n\n"
-            "โจทย์นี้ไม่มีขั้นวางแผน คุณจะได้ตรวจสอบ Algorithm "
+            "### 🔍 ขั้นตรวจสอบอัลกอริทึม (Algorithm)\n\n"
+            "โจทย์นี้ไม่มีขั้นวางแผน คุณจะได้ตรวจสอบอัลกอริทึม (Algorithm) "
             "ที่เกี่ยวข้องกับโจทย์นี้โดยตรง กรุณาตอบคำถามต่อไปนี้"
             "เพื่อเริ่มตรวจสอบ\n\n"
             f"{active_qp.get('system_question', '-')}"
@@ -2187,7 +2207,7 @@ async def start_algorithm_flow(ctx, question=None):
 
     if ctx.author.id in pending_learning_sessions:
         await ctx.send(
-            "⚠️ มี session ค้างอยู่ ส่ง Algorithm มาได้เลย "
+            "⚠️ มี session ค้างอยู่ ส่งอัลกอริทึม (Algorithm) มาได้เลย "
             "หรือพิมพ์ `!cancel` เพื่อเริ่มใหม่"
         )
         return
@@ -2255,7 +2275,11 @@ async def cancel(ctx):
 
     pending_learning_sessions.pop(user_id, None)
 
-    await ctx.send("❌ ยกเลิก session เดิมแล้ว พิมพ์ `!alg` เพื่อเริ่มใหม่ได้เลย")
+    await ctx.send(
+        "❌ ยกเลิก session เดิมแล้ว\n"
+        "พิมพ์ `!problem` เพื่อเลือกโจทย์\n"
+        "หรือ `!learn` เพื่อถามความรู้ทั่วไปได้เลย"
+    )
 
 
 # ==================================================
@@ -2475,6 +2499,15 @@ async def on_message(message):
     session = pending_learning_sessions[user_id]
 
     # ----------------------------------------------
+    # !learn Session (คำถามเดียว คำตอบเดียว จบทันที)
+    # ไม่มี hint, Algorithm, Evaluation QP, max attempts หรือ phase ใด ๆ
+    # จึงต้องเช็คก่อนทุกอย่างด้านล่างที่ผูกกับกลไกของ !alg/!problem
+    # ----------------------------------------------
+    if session.get("is_learn_session"):
+        await handle_learn_response(message, session)
+        return
+
+    # ----------------------------------------------
     # Quit Confirmation (รอคำตอบยืนยันจากรอบก่อนหน้า)
     # ----------------------------------------------
     if session.get("awaiting_quit_confirmation"):
@@ -2539,7 +2572,10 @@ async def on_message(message):
             ask_evaluation,
             session.get("attempt_history", []),
             session.get("expected_evidence"),
-            session.get("practice_prompt")
+            session.get("practice_prompt"),
+            session.get("expected_output"),
+            session.get("model_answer"),
+            session.get("rule_rejection_count", 0) >= MAX_RULE_REJECTIONS
         )
 
         # --------------------------------------
@@ -2597,6 +2633,56 @@ async def on_message(message):
             "progress",
             ""
         )
+
+        # --------------------------------------
+        # Rule-based check ตีกลับ (ขาดขั้น "จบ"/ขั้นแสดงผล)
+        # --------------------------------------
+        # ยังไม่ได้ประเมิน Logic จริง จึงไม่นับ attempt, ไม่ให้ hint และไม่ใส่
+        # attempt_history แค่แจ้งว่าขาดอะไรแล้วให้แก้ก่อนส่งใหม่ (บันทึกคำตอบ
+        # ลง log ได้ แต่ไม่ส่ง attempt เพื่อไม่ให้ attempt_count เพิ่ม)
+        if result.get("counts_attempt") is False:
+            session["rule_rejection_count"] = (
+                session.get("rule_rejection_count", 0) + 1
+            )
+            rejected_session_id = session.get("session_id")
+
+            if rejected_session_id:
+                update_learning_log(
+                    session_id=rejected_session_id,
+                    student_answer=message.content,
+                    understanding_level=level,
+                    feedback=feedback,
+                    strength=strength,
+                    improvement=improvement,
+                    next_action=next_action
+                )
+
+            rejection_message = (
+                "## 🟡 อัลกอริทึม (Algorithm) ยังไม่ครบองค์ประกอบที่จำเป็น\n\n"
+                "### 💬 Feedback\n\n"
+                f"{feedback}\n\n"
+            )
+
+            if improvement and improvement != "-":
+                rejection_message += (
+                    "### 🔧 สิ่งที่ควรทำ\n\n"
+                    f"{improvement}\n\n"
+                )
+
+            rejection_message += (
+                "ครั้งนี้ยังไม่นับเป็นครั้งที่ตอบ แก้ไขแล้วส่งมาใหม่ได้เลย"
+            )
+
+            await send_long_message(message.channel, rejection_message)
+            return
+
+        # ผ่าน rule-based check จริง (ครบขั้นบังคับ) เริ่มนับการตีกลับใหม่
+        # ถ้าถูกปล่อยผ่านทั้งที่ยังขาด ไม่รีเซ็ต เพื่อให้ครั้งต่อ ๆ ไปยังถูก
+        # ส่งให้ Typhoon ประเมินต่อ ไม่วนกลับไปถูกตีกลับอีก
+        rule_check_bypassed = bool(result.get("rule_check_bypassed"))
+
+        if not rule_check_bypassed and response_type == "ALGORITHM_ANSWER":
+            session["rule_rejection_count"] = 0
 
         # --------------------------------------
         # Current Attempt
@@ -2665,7 +2751,7 @@ async def on_message(message):
                 )
 
             conceptual_message += (
-                "\nลองปรับ Algorithm จากคำอธิบายนี้ "
+                "\nลองปรับอัลกอริทึม (Algorithm) จากคำอธิบายนี้ "
                 "แล้วส่งคำตอบมาได้เลย 😊"
             )
 
@@ -2700,6 +2786,9 @@ async def on_message(message):
             "### 📊 ระดับความเข้าใจ\n\n"
             f"**{title}**\n\n"
         )
+
+        if rule_check_bypassed:
+            feedback_message = f"💬 {RULE_BYPASS_NOTICE}\n\n" + feedback_message
 
         if feedback and feedback != "-":
             feedback_message += (
@@ -2786,7 +2875,7 @@ async def on_message(message):
                 if next_phase == "MONITORING_QP_POST_ALGORITHM":
                     await send_long_message(
                         message.channel,
-                        "## 🔍 ลองตรวจสอบ Algorithm ที่เขียน\n\n"
+                        "## 🔍 ลองตรวจสอบอัลกอริทึม (Algorithm) ที่เขียน\n\n"
                         f"{next_qp.get('system_question', '-')}"
                     )
                 else:
@@ -2835,12 +2924,12 @@ async def on_message(message):
             if hint_text:
                 feedback_message += (
                     f"\n\n### 💡 คำใบ้ระดับที่ {next_hint_level}/3\n\n"
-                    f"{hint_text}\n\nลองปรับ Algorithm แล้วส่งคำตอบมาอีกครั้ง"
+                    f"{hint_text}\n\nลองปรับอัลกอริทึม (Algorithm) แล้วส่งคำตอบมาอีกครั้ง"
                 )
             else:
                 feedback_message += (
                     "\n\n### 💡 ลองทบทวนอีกครั้ง\n\n"
-                    "ลองเชื่อมโยงองค์ประกอบสำคัญของโจทย์ แล้วปรับ Algorithm ของคุณ"
+                    "ลองเชื่อมโยงองค์ประกอบสำคัญของโจทย์ แล้วปรับอัลกอริทึม (Algorithm) ของคุณ"
                 )
 
         # ======================================
@@ -2850,7 +2939,7 @@ async def on_message(message):
             feedback_message += (
                 "\n\n### 📖 ลองทบทวนเพิ่มเติม\n\n"
                 "คำตอบอาจยังไม่ตรงกับแนวคิดสำคัญของเรื่องนี้ "
-                "ลองกลับไปทบทวนคำอธิบาย แล้วปรับ Algorithm อีกครั้ง"
+                "ลองกลับไปทบทวนคำอธิบาย แล้วปรับอัลกอริทึม (Algorithm) อีกครั้ง"
             )
 
         # --------------------------------------

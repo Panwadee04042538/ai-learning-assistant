@@ -88,18 +88,6 @@ class HelpTriggerFlowTest(unittest.TestCase):
 
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
-        self.log_path = os.path.join(self.tmpdir, "learning_logs.json")
-        self.log_patch = patch.object(logger, "LOG_PATH", self.log_path)
-        self.log_patch.start()
-
-        self.registry_path = os.path.join(
-            self.tmpdir, "student_registry.json"
-        )
-        self.registry_patch = patch.object(
-            registry_service, "REGISTRY_PATH", self.registry_path
-        )
-        self.registry_patch.start()
-
         main.pending_learning_sessions.clear()
 
         self.channel = FakeChannel()
@@ -140,8 +128,6 @@ class HelpTriggerFlowTest(unittest.TestCase):
         logger.save_logs(logs)
 
     def tearDown(self):
-        self.log_patch.stop()
-        self.registry_patch.stop()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def _send(self, text):
@@ -217,8 +203,7 @@ class HelpTriggerFlowTest(unittest.TestCase):
 
         self.assertIsNone(self._session(), "Session ต้องถูกลบหลังยืนยันจบ")
 
-        with open(self.log_path, encoding="utf-8") as f:
-            logs = json.load(f)
+        logs = logger.load_logs()
         self.assertEqual(logs[0]["final_status"], "CANCELLED")
 
     def test_quit_request_declined_keeps_session(self):

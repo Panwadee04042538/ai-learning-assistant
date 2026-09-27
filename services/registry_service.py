@@ -6,70 +6,26 @@
 #
 # ผูก Discord user_id เข้ากับรหัสนักเรียน (student_id)
 # เก็บเป็น mapping {discord_user_id: student_id} ใน
-# data/student_registry.json
+# ตาราง student_registry ใน SQLite
 # ==========================================
 
-import json
-import os
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(BASE_DIR)
-
-REGISTRY_PATH = os.path.join(
-    PROJECT_ROOT,
-    "data",
-    "student_registry.json"
-)
+from storage import db
 
 
 # ==========================================
-# Load / Save Registry
+# Load / Save Registry (SQLite)
 # ==========================================
 
 def _load_registry():
-    """โหลด mapping {discord_user_id: student_id} จากไฟล์"""
+    """โหลด mapping {discord_user_id: student_id} จากฐานข้อมูล"""
 
-    if not os.path.exists(REGISTRY_PATH):
-        return {}
-
-    try:
-        with open(
-            REGISTRY_PATH,
-            "r",
-            encoding="utf-8"
-        ) as file:
-
-            data = json.load(file)
-
-        if not isinstance(data, dict):
-            return {}
-
-        return data
-
-    except (json.JSONDecodeError, FileNotFoundError):
-        return {}
+    return db.load_registry()
 
 
 def _save_registry(registry):
-    """บันทึก mapping ลงไฟล์ สร้างโฟลเดอร์ data/ ให้ถ้ายังไม่มี"""
+    """แทนที่ mapping ทั้งหมดในฐานข้อมูล"""
 
-    os.makedirs(
-        os.path.dirname(REGISTRY_PATH),
-        exist_ok=True
-    )
-
-    with open(
-        REGISTRY_PATH,
-        "w",
-        encoding="utf-8"
-    ) as file:
-
-        json.dump(
-            registry,
-            file,
-            ensure_ascii=False,
-            indent=2
-        )
+    db.replace_registry(registry)
 
 
 # ==========================================
@@ -119,17 +75,4 @@ def register_student(discord_user_id, student_id):
     discord_user_id = str(discord_user_id)
     student_id = str(student_id).strip()
 
-    registry = _load_registry()
-
-    for existing_user_id, existing_student_id in registry.items():
-
-        if (
-            existing_student_id == student_id
-            and existing_user_id != discord_user_id
-        ):
-            return False
-
-    registry[discord_user_id] = student_id
-    _save_registry(registry)
-
-    return True
+    return db.register(discord_user_id, student_id)

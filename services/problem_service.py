@@ -133,7 +133,7 @@ def format_problem_message(problem):
         f"{input_text}\n\n"
         "### 📤 Output\n"
         f"{output_text}\n\n"
-        "### 🧩 โครงสร้าง Algorithm\n"
+        "### 🧩 โครงสร้างอัลกอริทึม (Algorithm)\n"
         f"{structure}"
     )
 
@@ -141,9 +141,9 @@ def format_problem_message(problem):
 
     if buggy_algorithm:
         message += (
-            "\n\n### 🐞 Algorithm ที่ต้องตรวจสอบ\n"
+            "\n\n### 🐞 อัลกอริทึม (Algorithm) ที่ต้องตรวจสอบ\n"
             f"```\n{buggy_algorithm}\n```\n"
-            "ลองตรวจสอบว่า Algorithm นี้มีจุดผิดตรงไหน "
+            "ลองตรวจสอบว่าอัลกอริทึม (Algorithm) นี้มีจุดผิดตรงไหน "
             "แล้วเสนอวิธีแก้ไข"
         )
 

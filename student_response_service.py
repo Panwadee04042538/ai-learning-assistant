@@ -82,6 +82,123 @@ def _looks_like_conceptual_question(text):
 
 
 # ==============================================
+# RULE-BASED REQUIRED COMPONENT CHECK
+# ==============================================
+
+REQUIRED_KEYWORDS = {
+    "จบ": ["จบ", "สิ้นสุด", "end", "End", "stop", "Stop"],
+    "output": [
+        "แสดง", "print", "output", "แสดงผล", "แสดงค่า", "แสดงผลลัพธ์"
+    ],
+}
+
+MISSING_COMPONENT_NAMES = {
+    "จบ": "จบ",
+    "output": "แสดงผล",
+}
+
+# ตัวอย่างที่แนะนำให้เด็กเพิ่ม (ขาดข้อเดียว)
+MISSING_COMPONENT_HINTS = {
+    "จบ": "'จบ' เป็นขั้นสุดท้าย",
+    "output": "เช่น 'แสดง [ผลลัพธ์]'",
+}
+
+# ลำดับแสดงเมื่อขาดทั้งสองข้อ: แสดงผลก่อน แล้วค่อยจบ
+MISSING_COMPONENT_DISPLAY_ORDER = ["output", "จบ"]
+
+BYPASS_PROMPT_NOTE = """
+
+หมายเหตุ: อัลกอริทึมนี้ขาดขั้นบังคับบางอย่าง
+ให้ประเมิน Process และ Logic เท่านั้น
+ผลต้องเป็น PARTIAL เสมอ ไม่ใช่ GOOD
+"""
+
+
+def build_missing_components_feedback(missing):
+    """
+    สร้างข้อความบอกเด็กว่าขาดขั้นบังคับอะไร (missing = รายชื่อ component
+    ที่ขาด เช่น ["จบ"], ["output"], ["จบ", "output"])
+    """
+    if len(missing) == 1:
+        name = missing[0]
+        return (
+            f"อัลกอริทึมยังขาดขั้น{MISSING_COMPONENT_NAMES[name]}\n"
+            f"ลองเพิ่ม {MISSING_COMPONENT_HINTS[name]} ก่อนส่งมาใหม่"
+        )
+
+    lines = ["อัลกอริทึมยังขาด 2 ขั้นตอนสำคัญ"]
+
+    for name in MISSING_COMPONENT_DISPLAY_ORDER:
+        if name in missing:
+            lines.append(
+                f"• ขาดขั้น{MISSING_COMPONENT_NAMES[name]} — "
+                f"ลองเพิ่ม {MISSING_COMPONENT_HINTS[name]}"
+            )
+
+    return "\n".join(lines)
+
+
+def _contains_keyword(text, keyword):
+    """
+    คำภาษาอังกฤษต้องเป็นคำเดี่ยว ๆ (ไม่ใช่ส่วนหนึ่งของคำอื่น เช่น "send",
+    "append" ไม่ถือว่ามี "end") และไม่สนตัวพิมพ์เล็ก/ใหญ่ ส่วนคำไทยเช็คแบบ
+    substring เพราะภาษาไทยไม่มีช่องว่างคั่นระหว่างคำ
+    """
+    if keyword.isascii():
+        pattern = rf"(?<![A-Za-z]){re.escape(keyword)}(?![A-Za-z])"
+        return re.search(pattern, text, flags=re.IGNORECASE) is not None
+
+    return keyword in text
+
+
+def find_missing_required_components(student_answer):
+    """คืนรายชื่อ component ที่ขาด (จบ / output) เรียงตามลำดับ [] ถ้าครบ"""
+    text = student_answer or ""
+
+    return [
+        component
+        for component, keywords in REQUIRED_KEYWORDS.items()
+        if not any(_contains_keyword(text, kw) for kw in keywords)
+    ]
+
+
+def check_required_components(student_answer):
+    """
+    Rule-based check ก่อนส่งให้ Typhoon: Algorithm ต้องมีขั้น "จบ" และขั้น
+    แสดงผล (output) เสมอ
+
+    Returns
+    -------
+    dict หรือ None
+        ถ้าขาดอย่างใดอย่างหนึ่ง คืนผลประเมิน PARTIAL ทันทีพร้อม feedback
+        ที่ระบุว่าขาดอะไร (ไม่ต้องส่งให้ Typhoon) ถ้าครบทั้งสอง คืน None
+        เพื่อให้ไปประเมิน Process ต่อตามปกติ
+
+        ผลที่ถูกตีกลับนี้ "ไม่นับ attempt" (counts_attempt=False) เพราะ
+        เด็กยังไม่ได้ถูกประเมิน Logic จริง ๆ แค่แจ้งให้เพิ่มขั้นที่ขาดก่อน
+        main.py ต้องไม่เพิ่ม attempt / ไม่ให้ hint / ไม่ใส่ attempt_history
+    """
+    missing = find_missing_required_components(student_answer)
+
+    if not missing:
+        return None
+
+    return {
+        "success": True,
+        "response_type": "ALGORITHM_ANSWER",
+        "understanding_level": "PARTIAL",
+        "feedback": build_missing_components_feedback(missing),
+        "strength": "",
+        "improvement": "",
+        "progress": "",
+        "next_action": "HINT",
+        "missing_components": missing,
+        "rule_based": True,
+        "counts_attempt": False,
+    }
+
+
+# ==============================================
 # BUILD EVALUATION PROMPT
 # ==============================================
 
@@ -91,7 +208,9 @@ def build_evaluation_prompt(
     student_answer,
     previous_attempts=None,
     expected_evidence=None,
-    practice_context=None
+    practice_context=None,
+    expected_output=None,
+    model_answer=None
 ):
     previous_attempts = previous_attempts or []
     expected_evidence = expected_evidence or ""
@@ -123,6 +242,14 @@ def build_evaluation_prompt(
 
     practice_text = practice_context.strip() if practice_context else (
         "ไม่มี Practice Context"
+    )
+
+    output_text = expected_output.strip() if expected_output else (
+        "ไม่ได้ระบุ Output ที่ต้องแสดงผลชัดเจน"
+    )
+
+    model_answer_text = model_answer.strip() if model_answer else (
+        "ไม่ได้ระบุ Model Answer อ้างอิง ให้ประเมินจากเกณฑ์อื่นด้านบนแทน"
     )
 
     prompt = f"""
@@ -197,6 +324,87 @@ PRACTICE CONTEXT
 
 หากเป็นโจทย์ฝึก ให้ประเมินว่านักเรียนตอบโจทย์ที่กำหนดจริงหรือไม่
 ไม่ใช่ประเมินจาก Algorithm ในอุดมคติที่คุณสร้างขึ้นเอง
+
+==================================================
+EXPECTED OUTPUT (จากโจทย์)
+==================================================
+
+{output_text}
+
+ใช้ข้อความนี้เป็นตัวอ้างอิงว่า Output ที่โจทย์ต้องการคืออะไร สำหรับ
+ตัดสินองค์ประกอบข้อ 4 (Output) ในหัวข้อ "เกณฑ์การประเมิน: ตรวจสอบ
+5 องค์ประกอบหลัก" ด้านล่าง
+
+==================================================
+MODEL ANSWER (เฉลยอ้างอิงสำหรับระบบ ไม่ใช่คำตอบตายตัวที่ต้องเขียนตาม)
+==================================================
+
+{model_answer_text}
+
+ใช้ Model Answer เป็นตัวอ้างอิงเฉพาะสำหรับองค์ประกอบข้อ 3 (Process)
+ว่าโจทย์นี้ต้องมีการประมวลผลแบบใดบ้าง (คำนวณ/ตรวจเงื่อนไข/วนซ้ำ) เท่านั้น
+ไม่ใช่นำ Algorithm ทั้งฉบับของนักเรียนมาเทียบกับ Model Answer แบบ
+เปอร์เซ็นต์อีกต่อไป การตัดสิน understanding_level ให้ใช้เกณฑ์ 5
+องค์ประกอบในหัวข้อถัดไปเท่านั้น ถ้าไม่ได้ระบุ Model Answer ไว้ (ข้อความ
+ด้านบนบอกว่าไม่ได้ระบุ) ให้อนุมาน Process ที่จำเป็นจากคำถามปัจจุบันแทน
+ห้ามอนุมาน Model Answer ทั้งฉบับขึ้นเอง
+
+==================================================
+เกณฑ์การประเมิน: ตรวจสอบ 5 องค์ประกอบหลัก (บังคับใช้เสมอ)
+==================================================
+(กฎนี้ใช้ตัดสินก่อนเสมอเมื่อ response_type = ALGORITHM_ANSWER
+ห้ามมองข้ามแม้ Previous Attempts หรือรอบก่อนหน้าจะเคยได้ PARTIAL มาก่อน)
+
+ตรวจ Algorithm ที่นักเรียนส่งมาว่ามีองค์ประกอบต่อไปนี้ครบกี่ข้อ จาก 5 ข้อ
+แต่ละข้อมีน้ำหนักเท่ากันข้อละ 20%:
+
+1. เริ่มต้น — มีขั้นเริ่มต้นชัดเจน (เช่น "เริ่มต้น", "Start")
+2. Input — มีการรับค่า/ข้อมูลนำเข้า
+3. Process — มีการประมวลผลตามที่โจทย์ต้องการ (คำนวณ/ตรวจเงื่อนไข/วนซ้ำ
+   ขึ้นอยู่กับโจทย์ว่าต้องการแบบใด ใช้ MODEL ANSWER ด้านบนเป็นตัวอ้างอิง
+   ว่าโจทย์นี้ต้องมี Process แบบใดบ้าง)
+4. Output (required เสมอ) — มีการแสดงผลลัพธ์ตรง "ความหมาย" กับ
+   EXPECTED OUTPUT ด้านบน
+5. จบ (required เสมอ) — มีขั้นสิ้นสุดชัดเจน (เช่น "จบ", "สิ้นสุด", "End")
+
+วิธีตัดสิน "ความหมาย" ของแต่ละองค์ประกอบ:
+- ตัดสินจากความหมาย ไม่ใช่ถ้อยคำ ชื่อตัวแปร หรือรูปแบบการเขียน ถ้า
+  นักเรียนเขียนด้วยคำพูดของตนเองแต่ความหมายตรงกับองค์ประกอบนั้น ให้
+  ถือว่ามีองค์ประกอบนั้นครบแล้ว เช่น องค์ประกอบ Output ที่โจทย์ระบุว่า
+  "แสดงยอดขายรวม" นักเรียนเขียนว่า "แสดงยอดขายทั้งหมด" หรือ "แสดง
+  total และ count" กับ "แสดง total, count" ถือว่าเป็นองค์ประกอบ Output
+  เดียวกัน
+- ให้ถือว่าขาดองค์ประกอบใดก็ต่อเมื่อไม่มีขั้นตอนนั้นเลย หรือสิ่งที่เขียน
+  คนละเรื่องกับองค์ประกอบนั้นจริง ๆ เท่านั้น ไม่ใช่เพราะถ้อยคำต่างจาก
+  โจทย์หรือ Model Answer
+
+Output และจบเป็น required component เสมอ ต่างจากข้อ 1-3 (เริ่มต้น,
+Input, Process) ที่ขาดได้ 1 ข้อแล้วยังผ่าน นับจำนวนองค์ประกอบที่มีครบ
+(0-5 ข้อ) แล้วใช้กฎนี้ตัดสิน understanding_level โดยตรง ตามลำดับนี้
+ห้ามใช้เกณฑ์อื่นมาลดหรือเพิ่มระดับอีก:
+
+- ถ้าขาด Output -> PARTIAL ไม่ว่าจะครบกี่ข้อ (แม้ครบ 4/5 หรือ 5/5
+  ในองค์ประกอบอื่นก็ตาม ห้ามให้ GOOD เด็ดขาด)
+- ถ้าขาดจบ -> PARTIAL ไม่ว่าจะครบกี่ข้อ (แม้ครบ 4/5 หรือ 5/5
+  ในองค์ประกอบอื่นก็ตาม ห้ามให้ GOOD เด็ดขาด)
+- ครบ 5/5 หรือ 4/5 (ต้องมีทั้ง Output และจบ) -> GOOD
+- ครบ 3/5 -> PARTIAL
+- ครบ 2/5 หรือน้อยกว่า -> NEEDS_IMPROVEMENT
+
+ข้อยกเว้น: ถ้าขาดทั้ง Output และองค์ประกอบอื่นจนนับได้รวม ≤2 ข้อ ให้ใช้
+NEEDS_IMPROVEMENT ตามเกณฑ์จำนวนข้อ (แย่กว่า PARTIAL อยู่แล้ว) ไม่ใช่
+PARTIAL จากกฎขาด Output/จบด้านบน
+
+ห้ามเด็ดขาด:
+- เมื่อครบตามเกณฑ์ GOOD แล้ว (5/5 หรือ 4/5 ที่มี Output กับจบครบ) ห้าม
+  หาเหตุผลอื่นเพิ่มเติมมาลดระดับเป็น PARTIAL อีก แม้จะยังพอมองเห็นจุดที่
+  ทำให้ดีขึ้นได้อีก (เช่น รูปแบบการเขียน ความละเอียดของคำอธิบาย สไตล์
+  การตั้งชื่อตัวแปร) เพราะสิ่งเหล่านี้ไม่ใช่ 1 ใน 5 องค์ประกอบข้างต้น
+- ห้ามใช้ Previous Attempts, ความรู้ทั่วไปนอกเหนือจากโจทย์, หรือ
+  รายละเอียดปลีกย่อยที่โจทย์ไม่ได้ระบุ มาเป็นเหตุผลเพิ่มหรือลดจำนวน
+  องค์ประกอบที่นับได้
+- ห้ามวนกลับไปตรวจซ้ำหาข้อบกพร่องเพิ่มเติมอีกหลังจากนับองค์ประกอบและ
+  ตัดสินระดับตามกฎด้านบนแล้ว การประเมินต้องหยุดที่ระดับนั้นทันที
 
 ==================================================
 PREVIOUS ATTEMPTS
@@ -440,7 +648,10 @@ def evaluate_student_response(
     llm_function,
     previous_attempts=None,
     expected_evidence=None,
-    practice_context=None
+    practice_context=None,
+    expected_output=None,
+    model_answer=None,
+    skip_required_check=False
 ):
     """
     Backward compatible:
@@ -450,6 +661,21 @@ def evaluate_student_response(
     previous_attempts
     expected_evidence
     practice_context
+    expected_output: Output ของโจทย์ (เช่น problem["output"] จาก Problem
+        Bank) ใช้ตัดสินองค์ประกอบ "Output" ซึ่งเป็น required component
+        เสมอ (ขาดไม่ได้ ไม่ว่าองค์ประกอบอื่นจะครบกี่ข้อ ดูรายละเอียดใน
+        build_evaluation_prompt)
+    model_answer: เฉลยอ้างอิง (เช่น problem["model_answer"] จาก Problem
+        Bank) ใช้เป็นตัวอ้างอิงเฉพาะองค์ประกอบ "Process" เท่านั้น การ
+        ตัดสิน understanding_level ใช้จำนวนองค์ประกอบหลักที่ครบ (5 ข้อ)
+        ไม่ใช่เปอร์เซ็นต์เทียบกับ Model Answer ทั้งฉบับอีกต่อไป: Output
+        และจบเป็น required เสมอ (ขาดข้อใดข้อหนึ่ง = PARTIAL สูงสุด ไม่ว่า
+        จะครบกี่ข้อ) ส่วนเริ่มต้น/Input/Process ขาดได้ 1 ข้อแล้วยังผ่าน
+        5/5 -> GOOD, 4/5 ที่มี Output+จบครบ -> GOOD, 3/5 -> PARTIAL,
+        ≤2/5 -> NEEDS_IMPROVEMENT ดูรายละเอียดใน build_evaluation_prompt
+    skip_required_check: True = ข้าม rule-based check (ขาดขั้น "จบ"/ขั้น
+        แสดงผล) แล้วส่งให้ Typhoon ประเมินเลย ใช้เมื่อเด็กถูกตีกลับซ้ำเกินเพดาน
+        ถ้ายังขาดขั้นบังคับอยู่ผลจะมี rule_check_bypassed=True
     """
 
     if not student_answer:
@@ -470,7 +696,9 @@ def evaluate_student_response(
             student_answer=student_answer,
             previous_attempts=previous_attempts,
             expected_evidence=expected_evidence,
-            practice_context=practice_context
+            practice_context=practice_context,
+            expected_output=expected_output,
+            model_answer=model_answer
         )
         prompt += """
 
@@ -511,14 +739,34 @@ Return response_type=CONCEPTUAL_QUESTION and next_action=EXPLAIN.
             "next_action": "HINT"
         }
 
+    # Rule-based check: ขาดขั้น "จบ" หรือขั้นแสดงผล -> PARTIAL ทันที
+    # ไม่ต้องส่งให้ Typhoon ตัดสิน
+    rule_check_bypassed = False
+    missing_components = []
+
+    if skip_required_check:
+        missing_components = find_missing_required_components(student_answer)
+        rule_check_bypassed = bool(missing_components)
+    else:
+        rule_based_result = check_required_components(student_answer)
+
+        if rule_based_result is not None:
+            rule_based_result["student_answer"] = student_answer
+            return rule_based_result
+
     prompt = build_evaluation_prompt(
         learning_goal=learning_goal,
         question=question,
         student_answer=student_answer,
         previous_attempts=previous_attempts,
         expected_evidence=expected_evidence,
-        practice_context=practice_context
+        practice_context=practice_context,
+        expected_output=expected_output,
+        model_answer=model_answer
     )
+
+    if rule_check_bypassed:
+        prompt += BYPASS_PROMPT_NOTE
 
     try:
         llm_response = llm_function(prompt)
@@ -531,5 +779,24 @@ Return response_type=CONCEPTUAL_QUESTION and next_action=EXPLAIN.
 
     result = parse_evaluation_response(llm_response)
     result["student_answer"] = student_answer
+
+    if rule_check_bypassed:
+        result["rule_check_bypassed"] = True
+        result["missing_components"] = missing_components
+
+        # "จบ"/แสดงผลเป็น required เสมอ แม้ปล่อยผ่านให้ Typhoon แล้ว
+        # ถ้า Typhoon ให้ GOOD ทั้งที่ยังขาด ต้องบังคับเป็น PARTIAL
+        if result.get("understanding_level") == "GOOD":
+            result["understanding_level"] = "PARTIAL"
+            result["next_action"] = "HINT"
+            result["level_capped"] = True
+
+            missing_feedback = build_missing_components_feedback(
+                missing_components
+            )
+            existing = (result.get("improvement") or "").strip()
+            result["improvement"] = (
+                f"{existing}\n{missing_feedback}".strip()
+            )
 
     return result

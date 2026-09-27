@@ -4,7 +4,12 @@
       "Bash(python test_hint_service.py)",
       "Bash(python test_runner.py)",
       "Bash(git stash *)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(python -m py_compile main.py)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('main.py', encoding='utf-8'\\).read\\(\\)\\)\")",
+      "Bash(python -m unittest tests.test_practice_flow -v)",
+      "Bash(python -m unittest tests.test_learning_flow tests.test_practice_flow -v)",
+      "Bash(git commit --amend -m ' *)"
     ]
   }
 }

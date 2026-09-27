@@ -99,20 +99,8 @@ class LearningFlowTest(unittest.TestCase):
     def setUp(self):
         # ใช้ไฟล์ log ชั่วคราว ไม่ให้ทับข้อมูลจริง
         self.tmpdir = tempfile.mkdtemp()
-        self.log_path = os.path.join(self.tmpdir, "learning_logs.json")
-        self.log_patch = patch.object(logger, "LOG_PATH", self.log_path)
-        self.log_patch.start()
-
         # ใช้ registry ชั่วคราว และลงทะเบียนผู้เรียนจำลองไว้ล่วงหน้า
         # (บอตบังคับ register ก่อนใช้งานทุก entry point)
-        self.registry_path = os.path.join(
-            self.tmpdir, "student_registry.json"
-        )
-        self.registry_patch = patch.object(
-            registry_service, "REGISTRY_PATH", self.registry_path
-        )
-        self.registry_patch.start()
-
         self.bank_path = os.path.join(self.tmpdir, "problem_bank.json")
         with open(self.bank_path, "w", encoding="utf-8") as file:
             json.dump(SAMPLE_PROBLEMS, file, ensure_ascii=False)
@@ -121,12 +109,6 @@ class LearningFlowTest(unittest.TestCase):
             problem_service, "PROBLEM_BANK_PATH", self.bank_path
         )
         self.bank_patch.start()
-
-        self.problem_log_path = os.path.join(self.tmpdir, "problem_logs.json")
-        self.problem_log_patch = patch.object(
-            logger, "PROBLEM_LOG_PATH", self.problem_log_path
-        )
-        self.problem_log_patch.start()
 
         main.pending_learning_sessions.clear()
         main.active_problem_context.clear()
@@ -138,10 +120,7 @@ class LearningFlowTest(unittest.TestCase):
         registry_service.register_student(self.author.id, "S-0001")
 
     def tearDown(self):
-        self.log_patch.stop()
-        self.registry_patch.stop()
         self.bank_patch.stop()
-        self.problem_log_patch.stop()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def _answer(self, text):
@@ -272,8 +251,7 @@ class LearningFlowTest(unittest.TestCase):
             self._answer("แก้ปัญหาได้ เพราะทดสอบกับตัวอย่างแล้ว")  # ตอบ Evaluation QP
             self.assertIsNone(self._session(), "Session ต้องถูกปิดเมื่อจบ")
 
-        with open(self.log_path, encoding="utf-8") as f:
-            logs = json.load(f)
+        logs = logger.load_logs()
         self.assertEqual(len(logs), 1)
         log = logs[0]
         self.assertEqual(log["final_status"], "COMPLETED")

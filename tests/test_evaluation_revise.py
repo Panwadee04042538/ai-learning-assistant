@@ -87,14 +87,6 @@ class RevisePhaseGateTest(unittest.TestCase):
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
 
-        self.registry_path = os.path.join(
-            self.tmpdir, "student_registry.json"
-        )
-        self.registry_patch = patch.object(
-            registry_service, "REGISTRY_PATH", self.registry_path
-        )
-        self.registry_patch.start()
-
         main.pending_learning_sessions.clear()
 
         self.channel = FakeChannel()
@@ -102,7 +94,6 @@ class RevisePhaseGateTest(unittest.TestCase):
         registry_service.register_student(self.author.id, "S-8501")
 
     def tearDown(self):
-        self.registry_patch.stop()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def _base_session(self, phase):
@@ -169,14 +160,6 @@ class ReviseRequestFlowTest(unittest.TestCase):
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
 
-        self.registry_path = os.path.join(
-            self.tmpdir, "student_registry.json"
-        )
-        self.registry_patch = patch.object(
-            registry_service, "REGISTRY_PATH", self.registry_path
-        )
-        self.registry_patch.start()
-
         main.pending_learning_sessions.clear()
 
         self.channel = FakeChannel()
@@ -206,7 +189,6 @@ class ReviseRequestFlowTest(unittest.TestCase):
         }
 
     def tearDown(self):
-        self.registry_patch.stop()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def _send(self, text):
@@ -222,7 +204,7 @@ class ReviseRequestFlowTest(unittest.TestCase):
         session = self._session()
         self.assertEqual(session["phase"], "MONITORING_QP")
         self.assertTrue(session["has_returned"])
-        self.assertIn("กลับไปแก้ Algorithm ได้ 1 ครั้ง", self.channel.sent[-1])
+        self.assertIn("กลับไปแก้อัลกอริทึม (Algorithm) ได้ 1 ครั้ง", self.channel.sent[-1])
 
     def test_second_revise_request_is_blocked(self):
         self._send("ขอแก้ไข")   # ครั้งที่ 1: สำเร็จ, phase -> MONITORING_QP
